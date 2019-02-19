@@ -1,13 +1,18 @@
 # Ubuntu cmdline utils
 
 - maintenance
-    update apt packages and do cleanups
+
+	update apt packages and do cleanups
 
 - tweak
-    performance tweaks for HDD
+
+	performance tweaks for HDD
 
 - zswap
-    watch zswap status
+
+	watch zswap status
 
 - purgeswap
-    swap everything back into the memory
+
+	swap everything back into the memory
+

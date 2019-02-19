@@ -1,0 +1,16 @@
+#!/bin/sh
+
+SWAPS="$(tail -n +2 /proc/swaps | awk '{print $1}')"
+
+[ -z "$SWAPS" ] && exit 0
+
+for SWAP in $SWAPS; do
+    echo "- $SWAP"
+    sudo swapoff "$SWAP"
+done
+
+for SWAP in $SWAPS; do
+    echo "+ $SWAP"
+    sudo swapon "$SWAP"
+done
+

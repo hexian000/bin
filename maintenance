@@ -1,0 +1,26 @@
+#!/bin/sh
+
+runApt() {
+	echo ">>> $1"
+	if ! sudo apt-get $2; then
+		echo "Failed!"
+		exit 1
+	fi
+}
+
+purgeConf() {
+	list="$(dpkg -l | grep ^rc | awk '{print $2}')"
+	if [ ! -z "$list" ]; then
+		echo "$list" | sudo xargs dpkg --purge
+	fi
+}
+
+echo ">>> Grant root access..."
+sudo echo -n
+runApt "Update catalog..." "update"
+runApt "Fix missing..." "install -f -y"
+runApt "Upgrade package..." "dist-upgrade -y"
+runApt "Remove redudant..." "autoremove -y"
+runApt "Clean archive..." "autoclean"
+echo ">>> Purge configuration..."
+purgeConf

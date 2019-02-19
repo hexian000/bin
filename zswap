@@ -1,0 +1,45 @@
+#!/bin/sh
+
+if [ $(whoami) != root ]; then
+    sudo "$0" $*
+    exit $?
+fi
+
+PURPLE='\e[38;5;13m'
+CYAN='\e[38;5;14m'
+YELLOW='\e[38;5;11m'
+RESET='\e[0m'
+
+enabled=$(cat /sys/module/zswap/parameters/enabled)
+[ $enabled = Y ] || exit 2
+memtotal=$(cat /proc/meminfo | grep '^MemTotal:' | awk '{print $2}')
+page_size=$(getconf PAGE_SIZE)
+compressor=$(cat /sys/module/zswap/parameters/compressor)
+zpool=$(cat /sys/module/zswap/parameters/zpool)
+max_pool_percent=$(cat /sys/module/zswap/parameters/max_pool_percent)
+max_pool_size=$(expr $memtotal / 1024 "*" $max_pool_percent / 100)
+while true; do
+    pool_total_size=$(cat /sys/kernel/debug/zswap/pool_total_size)
+    pool_total_size=$(expr $pool_total_size / 1048576)
+    [ $pool_total_size -gt $max_pool_size ] && pool_total_size=$max_pool_size
+    pool_usage=$(expr $pool_total_size "*" 100 / $max_pool_size)
+    stored_size=$(cat /sys/kernel/debug/zswap/stored_pages)
+    stored_size=$(expr $stored_size "*" $page_size / 1048576)
+    written_back_size=$(cat /sys/kernel/debug/zswap/written_back_pages)
+    written_back_size=$(expr $written_back_size "*" $page_size / 1048576)
+    reject_compress_poor=$(cat /sys/kernel/debug/zswap/reject_compress_poor)
+    reject_compress_poor=$(expr $reject_compress_poor "*" $page_size / 1048576)
+    [ $stored_size -eq 0 ] && compress_ratio=0 ||
+        compress_ratio=$(expr $pool_total_size "*" 100 / $stored_size)
+    buffer="$(date)
+${PURPLE}zswap${RESET}: loaded using pool ${CYAN}${compressor}${RESET}/${CYAN}${zpool}${RESET}
+
+${PURPLE}pool_total_size${RESET}:      ${YELLOW}$pool_total_size MB${RESET} / ${CYAN}$max_pool_size MB${RESET} (${YELLOW}${pool_usage}%${RESET})
+${PURPLE}stored_size${RESET}:          ${YELLOW}$stored_size MB${RESET}
+${PURPLE}written_back_size${RESET}:    ${YELLOW}$written_back_size MB${RESET}
+${PURPLE}reject_compress_poor${RESET}: ${YELLOW}$reject_compress_poor MB${RESET}
+${PURPLE}compress_ratio${RESET}:       ${YELLOW}${compress_ratio}%${RESET}
+"
+    clear; echo -n "${buffer}"
+    sleep 5
+done

@@ -16,7 +16,7 @@ purgeConf() {
 }
 
 echo ">>> Grant root access..."
-sudo echo -n
+sudo true
 runApt "Update catalog..." "update"
 runApt "Fix missing..." "install -f -y"
 runApt "Upgrade package..." "dist-upgrade -y"

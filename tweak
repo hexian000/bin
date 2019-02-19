@@ -1,5 +1,9 @@
 #!/bin/sh
 
+echo ">>> Grant root access..."
+sudo true
+
+echo ">>> Applying tweaks..."
 echo 0 | sudo tee /sys/block/sda/queue/iosched/low_latency
 echo 4096 | sudo tee /sys/block/sda/queue/nr_requests
 echo 512 | sudo tee /sys/block/sda/queue/read_ahead_kb

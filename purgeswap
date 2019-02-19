@@ -4,6 +4,9 @@ SWAPS="$(tail -n +2 /proc/swaps | awk '{print $1}')"
 
 [ -z "$SWAPS" ] && exit 0
 
+echo ">>> Grant root access..."
+sudo true
+
 for SWAP in $SWAPS; do
     echo "- $SWAP"
     sudo swapoff "$SWAP"

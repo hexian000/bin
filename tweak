@@ -1,18 +1,20 @@
 #!/bin/sh
 
-echo ">>> Grant root access..."
-sudo true
+if [ $(whoami) != root ]; then
+    sudo "$0" $*
+    exit $?
+fi
 
 echo ">>> Applying tweaks..."
-echo 0 | sudo tee /sys/block/sda/queue/iosched/low_latency
-echo 4096 | sudo tee /sys/block/sda/queue/nr_requests
-echo 512 | sudo tee /sys/block/sda/queue/read_ahead_kb
+echo 0 > /sys/block/sda/queue/iosched/low_latency
+echo 4096 > /sys/block/sda/queue/nr_requests
+echo 512 > /sys/block/sda/queue/read_ahead_kb
 
-#echo performance | sudo tee \
+#echo performance | tee \
 #    /sys/devices/system/cpu/cpufreq/policy0/scaling_governor \
 #    /sys/devices/system/cpu/cpufreq/policy1/scaling_governor \
 #    /sys/devices/system/cpu/cpufreq/policy2/scaling_governor \
-#    /sys/devices/system/cpu/cpufreq/policy3/scaling_governor
+#    /sys/devices/system/cpu/cpufreq/policy3/scaling_governor \
+#    > /dev/null
 
-#sudo intel_gpu_frequency -m
-
+#intel_gpu_frequency -m

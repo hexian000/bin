@@ -1,8 +1,13 @@
 #!/bin/sh
 
+if [ $(whoami) != root ]; then
+    sudo "$0" $*
+    exit $?
+fi
+
 runApt() {
 	echo ">>> $1"
-	if ! sudo apt-get $2; then
+	if ! apt-get $2; then
 		echo "Failed!"
 		exit 1
 	fi
@@ -11,12 +16,10 @@ runApt() {
 purgeConf() {
 	list="$(dpkg -l | grep ^rc | awk '{print $2}')"
 	if [ ! -z "$list" ]; then
-		echo "$list" | sudo xargs dpkg --purge
+		echo "$list" | xargs dpkg --purge
 	fi
 }
 
-echo ">>> Grant root access..."
-sudo true
 runApt "Update catalog..." "update"
 runApt "Fix missing..." "install -f -y"
 runApt "Upgrade package..." "dist-upgrade -y"
@@ -26,10 +29,10 @@ echo ">>> Purge configuration..."
 purgeConf
 
 echo ">>> Refresh snaps..."
-sudo snap refresh
+snap refresh
 
 echo ">>> Remove disabled snaps..."
 snap list --all | awk '/disabled/{print $1, $3}' |
     while read snapname revision; do
-        sudo snap remove "$snapname" --revision="$revision"
+        snap remove "$snapname" --revision="$revision"
     done

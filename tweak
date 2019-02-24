@@ -5,10 +5,26 @@ if [ $(whoami) != root ]; then
     exit $?
 fi
 
+PURPLE='\e[38;5;13m'
+CYAN='\e[38;5;14m'
+RESET='\e[0m'
+
+write() {
+    if [ -f "$1" ] && [ -w "$1" ]; then
+        echo "write ${PURPLE}$1${RESET}: ${CYAN}$2${RESET}"
+        echo "$2" > "$1"
+    fi
+}
+
 echo ">>> Applying tweaks..."
-echo 0 > /sys/block/sda/queue/iosched/low_latency
-echo 4096 > /sys/block/sda/queue/nr_requests
-echo 512 > /sys/block/sda/queue/read_ahead_kb
+for block in sda sdb sdc sdd sde sdf; do
+    if [ -d "/sys/block/$block" ] &&
+        [ "$(cat /sys/block/$block/queue/rotational)" = "1" ]; then
+        write /sys/block/$block/queue/iosched/low_latency 0
+        write /sys/block/$block/queue/nr_requests 4096
+        write /sys/block/$block/queue/read_ahead_kb 512
+    fi
+done
 
 #echo performance | tee \
 #    /sys/devices/system/cpu/cpufreq/policy0/scaling_governor \

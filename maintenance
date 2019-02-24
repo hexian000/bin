@@ -5,8 +5,11 @@ if [ $(whoami) != root ]; then
     exit $?
 fi
 
+CYAN='\e[38;5;14m'
+RESET='\e[0m'
+
 runApt() {
-	echo ">>> $1"
+	echo "${CYAN}>>> $1${RESET}"
 	if ! apt-get $2; then
 		echo "Failed!"
 		exit 1
@@ -25,13 +28,13 @@ runApt "Fix missing..." "install -f -y"
 runApt "Upgrade package..." "dist-upgrade -y"
 runApt "Remove redudant..." "autoremove -y"
 runApt "Clean archive..." "autoclean"
-echo ">>> Purge configuration..."
+echo "${CYAN}>>> Purge configuration...${RESET}"
 purgeConf
 
-echo ">>> Refresh snaps..."
+echo "${CYAN}>>> Refresh snaps...${RESET}"
 snap refresh
 
-echo ">>> Remove disabled snaps..."
+echo "${CYAN}>>> Remove disabled snaps...${RESET}"
 snap list --all | awk '/disabled/{print $1, $3}' |
     while read snapname revision; do
         snap remove "$snapname" --revision="$revision"

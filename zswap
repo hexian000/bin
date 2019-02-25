@@ -11,9 +11,12 @@ if [ $(whoami) != root ]; then
     exit $?
 fi
 
-MAGENTA='\e[35m'
-CYAN='\e[36m'
-YELLOW='\e[33m'
+RED='\e[91m'
+GREEN='\e[92m'
+YELLOW='\e[93m'
+BLUE='\e[94m'
+MAGENTA='\e[95m'
+CYAN='\e[96m'
 RESET='\e[0m'
 
 enabled=$(cat /sys/module/zswap/parameters/enabled)

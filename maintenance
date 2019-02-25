@@ -11,9 +11,9 @@ if [ $(whoami) != root ]; then
     exit $?
 fi
 
-CYAN='\e[36m'
-RED='\e[31m'
-YELLOW='\e[33m'
+RED='\e[91m'
+YELLOW='\e[93m'
+CYAN='\e[96m'
 RESET='\e[0m'
 
 showProgress() {

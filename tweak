@@ -11,8 +11,8 @@ if [ $(whoami) != root ]; then
     exit $?
 fi
 
-MAGENTA='\e[35m'
-CYAN='\e[36m'
+MAGENTA='\e[95m'
+CYAN='\e[96m'
 RESET='\e[0m'
 
 write() {

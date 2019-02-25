@@ -1,7 +1,7 @@
 #!/bin/sh
 
-if [ $(whoami) != root ]; then
-    if [ -n $(which sudo) ]; then
+if [ "$(whoami)" != "root" ]; then
+    if [ -n "$(which sudo)" ]; then
 		echo "\$ sudo $0 $*"
 		sudo $0 $*
 	else
@@ -22,7 +22,7 @@ showProgress() {
 
 tryRun() {
 	if ! $*; then
-		echo "${RED}Failed! code=$?${RESET}"
+		echo "${RED}Failed! code: $?${RESET}"
 		exit 1
 	fi
 }
@@ -57,13 +57,13 @@ maintenanceSnap() {
 		done
 }
 
-if [ -n $(which apt-get) ]; then
+if [ -n "$(which apt-get)" ]; then
 	maintenanceApt
 else
 	echo "${YELLOW}apt-get command not found${RESET}"
 fi
 
-if [ -n $(which snap) ]; then
+if [ -n "$(which snap)" ]; then
 	maintenanceSnap
 else
 	echo "${YELLOW}snap command not found${RESET}"

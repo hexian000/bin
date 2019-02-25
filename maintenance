@@ -11,10 +11,15 @@ if [ "$(whoami)" != "root" ]; then
     exit $?
 fi
 
-RED='\e[91m'
-YELLOW='\e[93m'
-CYAN='\e[96m'
-RESET='\e[0m'
+if [ -t 1 ] && [ "$(tput colors)" -ge 16 ] 2>/dev/null; then
+    RED="$(tput setaf 9)"
+    GREEN="$(tput setaf 10)"
+    YELLOW="$(tput setaf 11)"
+    BLUE="$(tput setaf 12)"
+    MAGENTA="$(tput setaf 13)"
+    CYAN="$(tput setaf 14)"
+    RESET="$(tput sgr0)"
+fi
 
 showProgress() {
 	echo "${CYAN}>>> $1...${RESET}"

@@ -1,7 +1,13 @@
 #!/bin/sh
 
 if [ $(whoami) != root ]; then
-    sudo "$0" $*
+    if [ -n $(which sudo) ]; then
+		echo "\$ sudo $0 $*"
+		sudo $0 $*
+	else
+		echo "\$ su -c "$0 $*" root"
+		su -c "$0 $*" root
+	fi
     exit $?
 fi
 

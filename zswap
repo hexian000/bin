@@ -1,13 +1,19 @@
 #!/bin/sh
 
 if [ $(whoami) != root ]; then
-    sudo "$0" $*
+    if [ -n $(which sudo) ]; then
+		echo "\$ sudo $0 $*"
+		sudo $0 $*
+	else
+		echo "\$ su -c "$0 $*" root"
+		su -c "$0 $*" root
+	fi
     exit $?
 fi
 
-PURPLE='\e[38;5;13m'
-CYAN='\e[38;5;14m'
-YELLOW='\e[38;5;11m'
+MAGENTA='\e[35m'
+CYAN='\e[36m'
+YELLOW='\e[33m'
 RESET='\e[0m'
 
 enabled=$(cat /sys/module/zswap/parameters/enabled)
@@ -32,13 +38,13 @@ while true; do
     [ $stored_size -eq 0 ] && compress_ratio=0 ||
         compress_ratio=$(expr $pool_total_size "*" 100 / $stored_size)
     buffer="$(date)
-${PURPLE}zswap${RESET}: loaded using pool ${CYAN}${compressor}${RESET}/${CYAN}${zpool}${RESET}
+${MAGENTA}zswap${RESET}: loaded using pool ${CYAN}${compressor}${RESET}/${CYAN}${zpool}${RESET}
 
-${PURPLE}pool_total_size${RESET}:      ${YELLOW}$pool_total_size MB${RESET} / ${CYAN}$max_pool_size MB${RESET} (${YELLOW}${pool_usage}%${RESET})
-${PURPLE}stored_size${RESET}:          ${YELLOW}$stored_size MB${RESET}
-${PURPLE}written_back_size${RESET}:    ${YELLOW}$written_back_size MB${RESET}
-${PURPLE}reject_compress_poor${RESET}: ${YELLOW}$reject_compress_poor MB${RESET}
-${PURPLE}compress_ratio${RESET}:       ${YELLOW}${compress_ratio}%${RESET}
+${MAGENTA}pool_total_size${RESET}:      ${YELLOW}$pool_total_size MB${RESET} / ${CYAN}$max_pool_size MB${RESET} (${YELLOW}${pool_usage}%${RESET})
+${MAGENTA}stored_size${RESET}:          ${YELLOW}$stored_size MB${RESET}
+${MAGENTA}written_back_size${RESET}:    ${YELLOW}$written_back_size MB${RESET}
+${MAGENTA}reject_compress_poor${RESET}: ${YELLOW}$reject_compress_poor MB${RESET}
+${MAGENTA}compress_ratio${RESET}:       ${YELLOW}${compress_ratio}%${RESET}
 "
     clear; echo -n "${buffer}"
     sleep 5

@@ -1,41 +1,70 @@
 #!/bin/sh
 
 if [ $(whoami) != root ]; then
-    sudo "$0" $*
+    if [ -n $(which sudo) ]; then
+		echo "\$ sudo $0 $*"
+		sudo $0 $*
+	else
+		echo "\$ su -c "$0 $*" root"
+		su -c "$0 $*" root
+	fi
     exit $?
 fi
 
-CYAN='\e[38;5;14m'
+CYAN='\e[36m'
+RED='\e[31m'
+YELLOW='\e[33m'
 RESET='\e[0m'
 
-runApt() {
-	echo "${CYAN}>>> $1${RESET}"
-	if ! apt-get $2; then
-		echo "Failed!"
+showProgress() {
+	echo "${CYAN}>>> $1...${RESET}"
+}
+
+tryRun() {
+	if ! $*; then
+		echo "${RED}Failed! code=$?${RESET}"
 		exit 1
 	fi
 }
 
-purgeConf() {
-	list="$(dpkg -l | grep ^rc | awk '{print $2}')"
-	if [ ! -z "$list" ]; then
-		echo "$list" | xargs dpkg --purge
-	fi
+maintenanceApt() {
+	showProgress "Update catalog"
+	tryRun apt-get update
+	showProgress "Fix missing"
+	tryRun apt-get install -f -y
+	showProgress "Upgrade package"
+	tryRun apt-get dist-upgrade -y
+	showProgress "Remove redudant"
+	tryRun apt-get autoremove -y
+	showProgress "Clean archive"
+	tryRun apt-get autoclean
+	showProgress "Purge configuration"
+	dpkg -l | grep ^rc | awk '{print $2}' |
+		while read packagename; do
+			[ -n "$packagename" ] &&
+				tryRun dpkg --purge "$packagename"
+		done
 }
 
-runApt "Update catalog..." "update"
-runApt "Fix missing..." "install -f -y"
-runApt "Upgrade package..." "dist-upgrade -y"
-runApt "Remove redudant..." "autoremove -y"
-runApt "Clean archive..." "autoclean"
-echo "${CYAN}>>> Purge configuration...${RESET}"
-purgeConf
+maintenanceSnap() {
+	showProgress "Refresh snaps"
+	snap refresh
 
-echo "${CYAN}>>> Refresh snaps...${RESET}"
-snap refresh
+	showProgress "Remove disabled snaps"
+	snap list --all | awk '/disabled/{print $1, $3}' |
+		while read snapname revision; do
+			tryRun snap remove "$snapname" --revision="$revision"
+		done
+}
 
-echo "${CYAN}>>> Remove disabled snaps...${RESET}"
-snap list --all | awk '/disabled/{print $1, $3}' |
-    while read snapname revision; do
-        snap remove "$snapname" --revision="$revision"
-    done
+if [ -n $(which apt-get) ]; then
+	maintenanceApt
+else
+	echo "${YELLOW}apt-get command not found${RESET}"
+fi
+
+if [ -n $(which snap) ]; then
+	maintenanceSnap
+else
+	echo "${YELLOW}snap command not found${RESET}"
+fi

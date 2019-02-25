@@ -1,17 +1,23 @@
 #!/bin/sh
 
 if [ $(whoami) != root ]; then
-    sudo "$0" $*
+    if [ -n $(which sudo) ]; then
+		echo "\$ sudo $0 $*"
+		sudo $0 $*
+	else
+		echo "\$ su -c "$0 $*" root"
+		su -c "$0 $*" root
+	fi
     exit $?
 fi
 
-PURPLE='\e[38;5;13m'
-CYAN='\e[38;5;14m'
+MAGENTA='\e[35m'
+CYAN='\e[36m'
 RESET='\e[0m'
 
 write() {
     if [ -f "$1" ] && [ -w "$1" ]; then
-        echo "write ${PURPLE}$1${RESET}: ${CYAN}$2${RESET}"
+        echo "write ${MAGENTA}$1${RESET}: ${CYAN}$2${RESET}"
         echo "$2" > "$1"
     fi
 }

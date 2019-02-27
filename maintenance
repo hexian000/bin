@@ -26,8 +26,10 @@ showProgress() {
 }
 
 tryRun() {
-	if ! $*; then
-		echo "${RED}Failed! code: $?${RESET}"
+	$*
+	retcode=$?
+	if [ "$retcode" -ne "0" ]] ; then
+		echo "${RED}Failed! code: $retcode${RESET}"
 		exit 1
 	fi
 }

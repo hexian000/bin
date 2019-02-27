@@ -48,8 +48,7 @@ maintenanceApt() {
 	showProgress "Purge configuration"
 	dpkg -l | grep ^rc | awk '{print $2}' |
 		while read packagename; do
-			[ -n "$packagename" ] &&
-				tryRun dpkg --purge "$packagename"
+			tryRun dpkg --purge "$packagename"
 		done
 }
 

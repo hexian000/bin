@@ -32,9 +32,7 @@ echo ">>> Applying tweaks..."
 for block in sda sdb sdc sdd sde sdf; do
     if [ -d "/sys/block/$block" ] &&
         [ "$(cat /sys/block/$block/queue/rotational)" = "1" ]; then
-        write /sys/block/$block/queue/iosched/low_latency 0
         write /sys/block/$block/queue/nr_requests 4096
-        write /sys/block/$block/queue/read_ahead_kb 512
     fi
 done
 

@@ -1,0 +1,50 @@
+#!/bin/sh
+
+if [ "$(whoami)" != "root" ]; then
+    if [ -n "$(which sudo)" ]; then
+                echo "\$ sudo $0 $*"
+                sudo $0 $*
+        else
+                echo "\$ su -c "$0 $*" root"
+                su -c "$0 $*" root
+        fi
+    exit $?
+fi
+
+if [ -t 1 ] && [ "$(tput colors)" -ge 16 ] 2>/dev/null; then
+    RED="$(tput setaf 9)"
+    GREEN="$(tput setaf 10)"
+    YELLOW="$(tput setaf 11)"
+    BLUE="$(tput setaf 12)"
+    MAGENTA="$(tput setaf 13)"
+    CYAN="$(tput setaf 14)"
+    RESET="$(tput sgr0)"
+fi
+
+echo "${CYAN}=== measure_clock ===${RESET}"
+for src in arm core h264 isp v3d uart pwm emmc pixel vec hdmi dpi; do
+    echo "$src:\t$(vcgencmd measure_clock $src)"
+done
+
+echo "${CYAN}=== measure_volts ===${RESET}"
+for id in core sdram_c sdram_i sdram_p; do
+    echo "$id:\t$(vcgencmd measure_volts $id)"
+done
+
+echo "${CYAN}=== measure_temp ===${RESET}"
+vcgencmd measure_temp
+
+[ "$1" = "all" ] || exit 0
+
+echo "${CYAN}=== codec_enabled ===${RESET}"
+for codec in H264 MPG2 WVC1 MPG4 MJPG WMV9; do
+    echo "$codec:\t$(vcgencmd codec_enabled $codec)"
+done
+
+echo "${CYAN}=== get_mem ===${RESET}"
+for cu in arm gpu; do
+    echo "$cu:\t$(vcgencmd get_mem $cu)"
+done
+
+# echo "${CYAN}=== get_config int ===${RESET}"
+# vcgencmd get_config int

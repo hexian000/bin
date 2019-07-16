@@ -71,6 +71,4 @@ fi
 
 if [ -n "$(which snap)" ]; then
 	maintenanceSnap
-else
-	echo "${YELLOW}snap command not found${RESET}"
 fi

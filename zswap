@@ -22,7 +22,11 @@ if [ -t 1 ] && [ "$(tput colors)" -ge 16 ] 2>/dev/null; then
 fi
 
 enabled=$(cat /sys/module/zswap/parameters/enabled)
-[ $enabled = Y ] || exit 2
+[ $enabled = Y ] || {
+    echo "${RED}zswap is not enabled.${RESET}"
+    exit 2
+}
+
 memtotal=$(cat /proc/meminfo | grep '^MemTotal:' | awk '{print $2}')
 page_size=$(getconf PAGE_SIZE)
 compressor=$(cat /sys/module/zswap/parameters/compressor)

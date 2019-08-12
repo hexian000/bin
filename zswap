@@ -2,12 +2,12 @@
 
 if [ "$(whoami)" != "root" ]; then
     if [ -n "$(which sudo)" ]; then
-		echo "\$ sudo $0 $*"
-		sudo $0 $*
-	else
-		echo "\$ su -c "$0 $*" root"
-		su -c "$0 $*" root
-	fi
+        echo "\$ sudo $0 $*"
+        sudo $0 $*
+    else
+        echo "\$ su -c "$0 $*" root"
+        su -c "$0 $*" root
+    fi
     exit $?
 fi
 
@@ -21,19 +21,25 @@ if [ -t 1 ] && [ "$(tput colors)" -ge 16 ] 2>/dev/null; then
     RESET="$(tput sgr0)"
 fi
 
-enabled=$(cat /sys/module/zswap/parameters/enabled)
-[ $enabled = Y ] || {
-    echo "${RED}zswap is not enabled.${RESET}"
+[ -f "/sys/module/zswap/parameters/enabled" ] || {
+    echo "${RED}zswap is not supported on this system.${RESET}"
     exit 2
 }
 
-memtotal=$(cat /proc/meminfo | grep '^MemTotal:' | awk '{print $2}')
-page_size=$(getconf PAGE_SIZE)
-compressor=$(cat /sys/module/zswap/parameters/compressor)
-zpool=$(cat /sys/module/zswap/parameters/zpool)
-max_pool_percent=$(cat /sys/module/zswap/parameters/max_pool_percent)
-max_pool_size=$(expr $memtotal / 1024 "*" $max_pool_percent / 100)
-while true; do
+buffer=""
+
+read_status() {
+    enabled=$(cat /sys/module/zswap/parameters/enabled)
+    [ $enabled = Y ] || {
+        echo "${RED}zswap is not enabled.${RESET}"
+        return
+    }
+    memtotal=$(cat /proc/meminfo | grep '^MemTotal:' | awk '{print $2}')
+    page_size=$(getconf PAGE_SIZE)
+    compressor=$(cat /sys/module/zswap/parameters/compressor)
+    zpool=$(cat /sys/module/zswap/parameters/zpool)
+    max_pool_percent=$(cat /sys/module/zswap/parameters/max_pool_percent)
+    max_pool_size=$(expr $memtotal / 1024 "*" $max_pool_percent / 100)
     pool_total_size=$(cat /sys/kernel/debug/zswap/pool_total_size)
     pool_total_size=$(expr $pool_total_size / 1048576)
     [ $pool_total_size -gt $max_pool_size ] && pool_total_size=$max_pool_size
@@ -46,7 +52,8 @@ while true; do
     reject_compress_poor=$(expr $reject_compress_poor "*" $page_size / 1048576)
     [ $stored_size -eq 0 ] && compress_ratio=0 ||
         compress_ratio=$(expr $pool_total_size "*" 100 / $stored_size)
-    buffer="$(date)
+    if [ "$1" = "-w" ]; then
+        buffer="$(date)
 ${MAGENTA}zswap${RESET}: loaded using pool ${CYAN}${compressor}${RESET}/${CYAN}${zpool}${RESET}
 
 ${MAGENTA}pool_total_size${RESET}:      ${YELLOW}$pool_total_size MB${RESET} / ${CYAN}$max_pool_size MB${RESET} (${YELLOW}${pool_usage}%${RESET})
@@ -55,6 +62,26 @@ ${MAGENTA}written_back_size${RESET}:    ${YELLOW}$written_back_size MB${RESET}
 ${MAGENTA}reject_compress_poor${RESET}: ${YELLOW}$reject_compress_poor MB${RESET}
 ${MAGENTA}compress_ratio${RESET}:       ${YELLOW}${compress_ratio}%${RESET}
 "
-    clear; echo -n "${buffer}"
-    sleep 5
-done
+    else
+        buffer="${buffer}${MAGENTA}zswap${RESET}: loaded using pool ${CYAN}${compressor}${RESET}/${CYAN}${zpool}${RESET}
+${MAGENTA}pool_total_size${RESET}:      ${YELLOW}$pool_total_size MB${RESET} / ${CYAN}$max_pool_size MB${RESET} (${YELLOW}${pool_usage}%${RESET})
+${MAGENTA}stored_size${RESET}:          ${YELLOW}$stored_size MB${RESET}
+${MAGENTA}written_back_size${RESET}:    ${YELLOW}$written_back_size MB${RESET}
+${MAGENTA}reject_compress_poor${RESET}: ${YELLOW}$reject_compress_poor MB${RESET}
+${MAGENTA}compress_ratio${RESET}:       ${YELLOW}${compress_ratio}%${RESET}
+"
+    fi
+}
+
+# watch
+[ "$1" = "-w" ] && {
+    while true; do
+        read_status -w
+        clear
+        echo -n "${buffer}"
+        sleep 5
+    done
+}
+
+read_status
+echo -n "${buffer}"

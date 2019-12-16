@@ -1,7 +1,7 @@
 #!/bin/sh
 
 temp="$(mktemp -d)"
-cc -pipe -g -O2 -DNDEBUG ${CFLAGS} ${LDFLAGS} $1 -o "${temp}/a.out" || {
+cc -pipe -g -O2 -DNDEBUG -std=c11 ${CFLAGS} ${LDFLAGS} $1 -o "${temp}/a.out" || {
     rmdir "${temp}"
     exit 1
 }

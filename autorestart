@@ -1,0 +1,7 @@
+#!/bin/sh
+
+while true; do
+    sh -c "$*"
+    [ $? = 0 ] && break
+    sleep 2
+done

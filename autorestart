@@ -2,6 +2,11 @@
 
 while true; do
     sh -c "$*"
-    [ $? = 0 ] && break
+    exitcode=$?
+    [ ${exitcode} -eq 0 ] && {
+        echo "Program terminated noramlly." >&2
+        break
+    }
+    echo "Exited with: ${exitcode}, wait 2 seconds to retry" >&2
     sleep 2
 done

@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+
+import os
+import os.path
+import math
+from datetime import datetime, timedelta
+page_size = os.sysconf("SC_PAGESIZE")
+
+
+def get_btime():
+    with open('/proc/stat') as f:
+        for line in f:
+            if 'btime' in line:
+                return int(line.split()[1])
+
+
+now = datetime.now().astimezone()
+btime = datetime.fromtimestamp(get_btime()).astimezone()
+uptime = str(timedelta(seconds=math.floor((now - btime).total_seconds())))
+if os.path.exists("/var/run/reboot-required"):
+    uptime = uptime + " (!)"
+
+
+def get_meminfo():
+    mem_total_kb, mem_available_kb = 0, 0
+    swap_total_kb, swap_free_kb = 0, 0
+    with open('/proc/meminfo') as f:
+        for line in f:
+            if 'MemTotal' in line:
+                mem_total_kb = int(line.split()[1])
+            elif 'MemAvailable' in line:
+                mem_available_kb = int(line.split()[1])
+            elif 'SwapTotal' in line:
+                swap_total_kb = int(line.split()[1])
+            elif 'SwapFree' in line:
+                swap_free_kb = int(line.split()[1])
+    return mem_total_kb, mem_available_kb, swap_total_kb, swap_free_kb
+
+
+def read_node(path):
+    with open(path, "r") as f:
+        return f.read()
+
+
+mem_total_kb, mem_available_kb, swap_total_kb, swap_free_kb = get_meminfo()
+mem_used_kb = mem_total_kb - mem_available_kb
+swap_used_kb = swap_total_kb - swap_free_kb
+
+# max_pool_ratio = float(
+#     read_node("/sys/module/zswap/parameters/max_pool_percent")) * 1e-2
+# max_pool_size_mb = mem_total_kb * max_pool_ratio / 1024.0
+# pool_total_size = int(read_node("/sys/kernel/debug/zswap/pool_total_size"))
+# stored_pages = int(read_node("/sys/kernel/debug/zswap/stored_pages"))
+# compressed_mb = pool_total_size / 1048576.0
+# stored_mb = stored_pages * page_size / 1048576.0
+
+mem_usage = "%.1f MiB / %.1f MiB ( %.0f%% )" % (
+    mem_used_kb / 1024.0,
+    mem_total_kb / 1024.0,
+    mem_used_kb / mem_total_kb * 100.0
+)
+
+# mem_compressed = "%.1f MiB ( stored %.1f MiB, saved %.1f MiB )" % (
+#     compressed_mb,
+#     stored_mb,
+#     stored_mb - compressed_mb
+# )
+
+swap_usage = "%.1f MiB / %.1f MiB ( %.0f%% )" % (
+    swap_used_kb / 1024.0,
+    swap_total_kb / 1024.0,
+    swap_used_kb / swap_total_kb * 100.0
+)
+
+
+loadavg = read_node("/proc/loadavg").split()[0:3]
+temp = int(read_node("/sys/class/thermal/thermal_zone0/temp")) / 1000.0
+
+print("%-20s  %s" % ("Now:", now.isoformat(timespec="seconds")))
+print("%-20s  %s" % ("Boot time:", btime.isoformat(timespec="seconds")))
+print("%-20s  %s" % ("Uptime:", uptime))
+print()
+print("%-20s  %s" % ("System load:", " ".join(loadavg)))
+print("%-20s  %s" % ("Memory usage:", mem_usage))
+# print("%-20s  %s" % ("Memory compressed:", mem_compressed))
+print("%-20s  %s" % ("Swap usage:", swap_usage))
+print("%-20s  %.1f C" % ("Temperature:", temp))
+print()

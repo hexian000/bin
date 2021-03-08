@@ -4,7 +4,6 @@ import subprocess
 
 
 def measure_clock():
-    print("=== measure_clock ===")
     for src in ["core", "h264", "isp", "v3d", "arm"]:
         freq = subprocess.check_output(["vcgencmd", "measure_clock", src])
         print(src+"\t", freq.decode("utf-8").strip())
@@ -12,27 +11,34 @@ def measure_clock():
 
 
 def measure_volts():
-    print("=== measure_volts ===")
     for src in ["core", "sdram_c", "sdram_i", "sdram_p"]:
         freq = subprocess.check_output(["vcgencmd", "measure_volts", src])
         print(src+"\t", freq.decode("utf-8").strip())
     print()
 
 
-def measure_temp():
-    print("=== measure_temp ===")
-    freq = subprocess.check_output(["vcgencmd", "measure_temp"])
-    print("core\t", freq.decode("utf-8").strip())
+def get_mem():
+    gpu = subprocess.check_output(["vcgencmd", "get_mem", "gpu"])
+    print(gpu.decode("utf-8").strip())
+    malloc = subprocess.check_output(["vcgencmd", "get_mem", "malloc"])
+    malloc_total = subprocess.check_output(
+        ["vcgencmd", "get_mem", "malloc_total"])
+    print(malloc.decode("utf-8").strip(), malloc_total.decode("utf-8").strip())
+    reloc = subprocess.check_output(["vcgencmd", "get_mem", "reloc"])
+    reloc_total = subprocess.check_output(
+        ["vcgencmd", "get_mem", "reloc_total"])
+    print(reloc.decode("utf-8").strip(), reloc_total.decode("utf-8").strip())
     print()
 
 
-def get_throttled():
-    print("=== get_throttled ===")
+def measure_soc():
+    freq = subprocess.check_output(["vcgencmd", "measure_temp"])
+    print(freq.decode("utf-8").strip())
     value = subprocess.check_output(["vcgencmd", "get_throttled"])
     env = {}
     exec(value, {}, env)
     throttled = env["throttled"]
-    print("throttled =", hex(throttled))
+    print("throttled:", hex(throttled))
 
     def explain_throttled(throttled):
         throttled_flags = {
@@ -55,6 +61,5 @@ def get_throttled():
 if __name__ == "__main__":
     measure_clock()
     measure_volts()
-    measure_temp()
-    get_throttled()
-
+    get_mem()
+    measure_soc()

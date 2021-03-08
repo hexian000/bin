@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import time
+import requests
+import argparse
+import logging
+
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%FT%T%z"
+)
+
+parser = argparse.ArgumentParser("portald")
+parser.add_argument(
+    "-i", "--interval", help="check interval in seconds, 0 for oneshot", type=int, default=0)
+parser.add_argument(
+    "-t", "--timeout", help="request timeout in seconds", type=int, default=15)
+parser.add_argument("url", help="URL to generate HTTP 204", type=str, nargs='?',
+                    default="https://connect.rom.miui.com/generate_204")
+args = parser.parse_args()
+
+
+def portal_check():
+    try:
+        r = requests.head(args.url, timeout=args.timeout)
+        if r.status_code != 204:
+            logging.error("KO HTTP %d", r.status_code)
+            return False
+        t = int(r.elapsed.total_seconds()*1e+3)
+        logging.info("OK %dms", t)
+        return True
+    except Exception as ex:
+        logging.error("KO %s", ex)
+    return False
+
+
+def set_led(on):
+    if on:
+        logging.debug("turning LED on")
+        os.system("echo 1 >/sys/class/leds/led1/brightness")
+    else:
+        logging.debug("turning LED off")
+        os.system("echo 0 >/sys/class/leds/led1/brightness")
+
+
+def daemon():
+    last = None
+    while True:
+        ok = portal_check()
+        if ok != last:
+            set_led(not ok)
+            last = ok
+        time.sleep(args.interval)
+
+
+if __name__ == "__main__":
+    if args.interval < 1:
+        ok = portal_check()
+        sys.exit(0 if ok else 1)
+    daemon()

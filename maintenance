@@ -3,7 +3,7 @@
 if [ "$(whoami)" != "root" ]; then
     if [ -n "$(which sudo)" ]; then
 		echo "\$ sudo $0 $*"
-		sudo $0 $*
+		sudo $0 $@
 	else
 		echo "\$ su -c "$0 $*" root"
 		su -c "$0 $*" root
@@ -34,6 +34,13 @@ tryRun() {
 	fi
 }
 
+dryRunApt() {
+	showProgress "Update catalog"
+        tryRun apt-get update
+        showProgress "List upgradable"
+        tryRun apt list --upgradable
+}
+
 maintenanceApt() {
 	showProgress "Update catalog"
 	tryRun apt-get update
@@ -62,6 +69,11 @@ maintenanceSnap() {
 			tryRun snap remove "$snapname" --revision="$revision"
 		done
 }
+
+if [ "$1" = "-d" ] || [ "$1" = "--dry-run" ]; then
+	dryRunApt
+	exit 0
+fi
 
 if [ -n "$(which apt-get)" ]; then
 	maintenanceApt

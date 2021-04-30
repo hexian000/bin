@@ -10,7 +10,7 @@ shift
 base="$(basename "${script}" .cc)"
 
 temp="$(mktemp -d)"
-${CXX:-g++} -pipe -g -O3 -DNDEBUG -std=c++17 ${CFLAGS} ${LDFLAGS} "${script}" -o "${temp}/${base}" || {
+clang++ -O3 -pedantic -Wall -Wextra ${CXXFLAGS} ${LDFLAGS} "${script}" -o "${temp}/${base}" || {
     rmdir "${temp}"
     exit 1
 }

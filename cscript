@@ -1,7 +1,12 @@
 #!/bin/sh
 
+if which clang >/dev/null 2>&1 && which lli >/dev/null 2>&1; then
+    clang -O3 -pedantic -Wall -Wextra -Werror -c -emit-llvm -o - ${CFLAGS} "$1" | lli -
+    exit 0
+fi
+
 temp="$(mktemp -d)"
-cc -pipe -g -O2 -DNDEBUG -std=c11 ${CFLAGS} ${LDFLAGS} $1 -o "${temp}/a.out" || {
+cc -O3 ${CFLAGS} ${LDFLAGS} $1 -o "${temp}/a.out" || {
     rmdir "${temp}"
     exit 1
 }

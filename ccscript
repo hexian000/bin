@@ -1,11 +1,21 @@
 #!/bin/sh
 
+start_path="$(pwd)"
 script="$1"
-shift
 if ! [ -f "${script}" ]; then
     echo "\"${script}\" - file not found" >&2
     exit 1
 fi
+shift
 base="$(basename "${script}" .cc)"
 
-clang++ -O3 -pedantic -Wall -Wextra ${CXXFLAGS} -c -emit-llvm -o - "${script}" | lli -O3 --fake-argv0="${base}" - "$@"
+temp="$(mktemp -d)"
+${CXX:-g++} -pipe -g -O3 -DNDEBUG -std=c++17 ${CFLAGS} ${LDFLAGS} "${script}" -o "${temp}/${base}" || {
+    rmdir "${temp}"
+    exit 1
+}
+
+cd "${temp}"
+"./${base}" "$@"
+cd "${start_path}"
+rm -r "${temp}"

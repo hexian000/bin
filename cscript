@@ -1,11 +1,11 @@
 #!/bin/sh
 
 script="$1"
-shift
 if ! [ -f "${script}" ]; then
     echo "\"${script}\" - file not found" >&2
     exit 1
 fi
+shift
 base="$(basename "${script}" .c)"
 
-clang -O3 -pedantic -Wall -Wextra -Werror ${CFLAGS} -c -emit-llvm -o - "${script}" | lli -O3 --fake-argv0="${base}" - "$@"
+clang -O3 -pedantic -Wall -Wextra -Werror ${CFLAGS} -c -emit-llvm -o - "${script}" | lli -O3 --fake-argv0="./${base}" - "$@"

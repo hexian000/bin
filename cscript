@@ -1,15 +1,11 @@
 #!/bin/sh
 
-if which clang >/dev/null 2>&1 && which lli >/dev/null 2>&1; then
-    clang -O3 -pedantic -Wall -Wextra -Werror -c -emit-llvm -o - ${CFLAGS} "$1" | lli -
-    exit 0
-fi
-
-temp="$(mktemp -d)"
-cc -O3 ${CFLAGS} ${LDFLAGS} $1 -o "${temp}/a.out" || {
-    rmdir "${temp}"
-    exit 1
-}
+script="$1"
 shift
-"${temp}/a.out" $*
-rm -r "${temp}"
+if ! [ -f "${script}" ]; then
+    echo "\"${script}\" - file not found" >&2
+    exit 1
+fi
+base="$(basename "${script}" .c)"
+
+clang -O3 -pedantic -Wall -Wextra -Werror ${CFLAGS} -c -emit-llvm -o - "${script}" | lli -O3 --fake-argv0="${base}" - "$@"

@@ -16,7 +16,7 @@ else
     temp="$(mktemp -d)"
 fi
 
-clang++ -O3 -pedantic -Wall -Wextra ${CXXFLAGS} ${LDFLAGS} "${script}" -o "${temp}/${base}" \
+clang++ -pipe -O3 -pedantic -Wall -Wextra ${CXXFLAGS} ${LDFLAGS} "${script}" -o "${temp}/${base}" \
     -lm -lrt -lpthread || {
     rm -r "${temp}"
     exit 1

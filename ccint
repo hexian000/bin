@@ -9,9 +9,16 @@ fi
 shift
 base="$(basename "${script}" .cc)"
 
-temp="$(mktemp -d)"
-clang++ -O3 -pedantic -Wall -Wextra ${CXXFLAGS} ${LDFLAGS} "${script}" -o "${temp}/${base}" || {
-    rmdir "${temp}"
+if [ -d "/dev/shm" ]; then
+    # prefer memory
+    temp="$(mktemp -p /dev/shm -d)"
+else
+    temp="$(mktemp -d)"
+fi
+
+clang++ -O3 -pedantic -Wall -Wextra ${CXXFLAGS} ${LDFLAGS} "${script}" -o "${temp}/${base}" \
+    -lm -lrt -lpthread || {
+    rm -r "${temp}"
     exit 1
 }
 

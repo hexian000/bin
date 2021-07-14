@@ -16,13 +16,26 @@ else
     temp="$(mktemp -d)"
 fi
 
-clang++ -pipe -O3 -pedantic -Wall -Wextra ${CXXFLAGS} ${LDFLAGS} "${script}" -o "${temp}/${base}" \
-    -lm -lrt -lpthread || {
+if which "clang++" >/dev/null 2>&1; then
+    # prefer clang
+    CXX="clang++"
+fi
+
+if [ "${CXXFLAGS}" = "" ]; then
+    CXXFLAGS="-pipe -O3 -pedantic -Wall -Wextra"
+fi
+
+if [ "${LDFLAGS}" = "" ]; then
+    # link glibc
+    LDFLAGS="-lm -lrt -lpthread"
+fi
+
+printf "+ ${CXX} ${CXXFLAGS} ${LDFLAGS} -o \"${temp}/${base}\" \"${script}\"\n"
+if ! ${CXX} ${CXXFLAGS} ${LDFLAGS} -o "${temp}/${base}" "${script}"; then
     rm -r "${temp}"
     exit 1
-}
+fi
 
-cd "${temp}"
-"./${base}" "$@"
-cd "${start_path}"
+(cd "${temp}" && "./${base}" "$@")
+
 rm -r "${temp}"

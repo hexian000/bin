@@ -2,10 +2,39 @@
 
 script="$1"
 if ! [ -f "${script}" ]; then
-    echo "\"${script}\" - file not found" >&2
-    exit 1
+	echo "\"${script}\" - file not found" >&2
+	exit 1
 fi
 shift
 base="$(basename "${script}" .c)"
 
-clang -pipe -O3 -pedantic -Wall -Wextra -Werror ${CFLAGS} -c -emit-llvm -o - "${script}" | lli -O3 --fake-argv0="./${base}" - "$@"
+if [ -d "/dev/shm" ]; then
+	# prefer memory
+	temp="$(mktemp -p /dev/shm -d)"
+else
+	temp="$(mktemp -d)"
+fi
+
+if which "clang" >/dev/null 2>&1; then
+    # prefer clang
+    CC="clang"
+fi
+
+if [ "${CFLAGS}" = "" ]; then
+	CFLAGS="-pipe -O3 -pedantic -Wall -Wextra -Werror"
+fi
+
+if [ "${LDFLAGS}" = "" ]; then
+	# link glibc
+	LDFLAGS="-lm -lrt -lpthread"
+fi
+
+printf "+ ${CC} ${CFLAGS} ${LDFLAGS} -o \"${temp}/${base}\" \"${script}\"\n"
+if ! ${CC} ${CFLAGS} ${LDFLAGS} -o "${temp}/${base}" "${script}"; then
+	rm -r "${temp}"
+	exit 1
+fi
+
+(cd "${temp}" && "./${base}" "$@")
+
+rm -r "${temp}"

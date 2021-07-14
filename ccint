@@ -22,7 +22,7 @@ if which "clang++" >/dev/null 2>&1; then
 fi
 
 if [ "${CXXFLAGS}" = "" ]; then
-    CXXFLAGS="-pipe -O3 -pedantic -Wall -Wextra"
+    CXXFLAGS="-pipe -pedantic -Wall -Wextra -O3"
 fi
 
 if [ "${LDFLAGS}" = "" ]; then
@@ -30,8 +30,8 @@ if [ "${LDFLAGS}" = "" ]; then
     LDFLAGS="-lm -lrt -lpthread"
 fi
 
-printf "+ ${CXX} ${CXXFLAGS} ${LDFLAGS} -o \"${temp}/${base}\" \"${script}\"\n"
-if ! ${CXX} ${CXXFLAGS} ${LDFLAGS} -o "${temp}/${base}" "${script}"; then
+printf "+ ${CXX} ${CXXFLAGS} -o \"${temp}/${base}\" \"${script}\" ${LDFLAGS}\n"
+if ! ${CXX} ${CXXFLAGS} -o "${temp}/${base}" "${script}" ${LDFLAGS}; then
     rm -r "${temp}"
     exit 1
 fi

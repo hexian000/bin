@@ -21,7 +21,7 @@ if which "clang" >/dev/null 2>&1; then
 fi
 
 if [ "${CFLAGS}" = "" ]; then
-	CFLAGS="-pipe -O3 -pedantic -Wall -Wextra -Werror"
+	CFLAGS="-pipe -pedantic -Wall -Wextra -Werror -O3"
 fi
 
 if [ "${LDFLAGS}" = "" ]; then
@@ -29,8 +29,8 @@ if [ "${LDFLAGS}" = "" ]; then
 	LDFLAGS="-lm -lrt -lpthread"
 fi
 
-printf "+ ${CC} ${CFLAGS} ${LDFLAGS} -o \"${temp}/${base}\" \"${script}\"\n"
-if ! ${CC} ${CFLAGS} ${LDFLAGS} -o "${temp}/${base}" "${script}"; then
+printf "+ ${CC} ${CFLAGS} -o \"${temp}/${base}\" \"${script}\" ${LDFLAGS}\n"
+if ! ${CC} ${CFLAGS} -o "${temp}/${base}" "${script}" ${LDFLAGS}; then
 	rm -r "${temp}"
 	exit 1
 fi

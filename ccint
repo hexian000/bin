@@ -26,11 +26,11 @@ if [ "${CXXFLAGS}" = "" ]; then
 fi
 
 if [ "${LDFLAGS}" = "" ]; then
-    # link glibc
-    LDFLAGS="-lm -lrt -lpthread"
+    # try link common libs
+    LDFLAGS="-lm -lrt -lpthread -ldl"
 fi
 
-printf "+ ${CXX} ${CXXFLAGS} -o \"${temp}/${base}\" \"${script}\" ${LDFLAGS}\n"
+# printf "+ ${CXX} ${CXXFLAGS} -o \"${temp}/${base}\" \"${script}\" ${LDFLAGS}\n"
 if ! ${CXX} ${CXXFLAGS} -o "${temp}/${base}" "${script}" ${LDFLAGS}; then
     rm -r "${temp}"
     exit 1

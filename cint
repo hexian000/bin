@@ -11,6 +11,8 @@ base="$(basename "${script}" .c)"
 if [ -d "/dev/shm" ]; then
 	# prefer memory
 	temp="$(mktemp -p /dev/shm -d)"
+elif [ -d "/run/shm" ]; then
+    temp="$(mktemp -p /run/shm -d)"
 else
 	temp="$(mktemp -d)"
 fi

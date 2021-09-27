@@ -1,12 +1,16 @@
 #!/bin/sh
 
+log() {
+    printf "$(date -Iseconds) $*\n" >&2
+}
+
 while true; do
-    "$@"
-    ret="$?"
-    if [ "${ret}" = "0" ]; then
-        echo "$(date -Iseconds) Command completed normally."
-        exit 0
+    sh -c "$*"
+    exitcode="$?"
+    if [ "${exitcode}" = "0" ]; then
+        log "Program terminated noramlly."
+        break
     fi
-    echo "$(date -Iseconds) Command finished with ${ret}. Retrying in 60 seconds..."
+    log "Exited with: ${exitcode}, wait 60 seconds to retry"
     sleep 60
 done

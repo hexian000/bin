@@ -1,0 +1,12 @@
+#!/bin/sh
+
+while true; do
+    "$@"
+    ret="$?"
+    if [ "${ret}" = "0" ]; then
+        echo "$(date -Iseconds) Command completed normally."
+        exit 0
+    fi
+    echo "$(date -Iseconds) Command finished with ${ret}. Retrying in 60 seconds..."
+    sleep 60
+done

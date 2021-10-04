@@ -4,13 +4,33 @@ log() {
     printf "$(date -Iseconds) $*\n" >&2
 }
 
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "usage: $0 -h|--help"
+    echo "usage: $0 <options> [--] command"
+    echo "options:"
+    echo "    -w seconds      wait this time before retry, default: 10s"
+    exit 0
+fi
+
+wait=10
+
 while true; do
-    sh -c "$*"
+    case "$1" in
+    "-w") wait="$2"; shift 2;;
+    "--") shift; break;;
+    *)    break;;
+    esac
+done
+
+while true; do
+    sh -xc "$*"
     exitcode="$?"
     if [ "${exitcode}" = "0" ]; then
         log "Program terminated noramlly."
         break
     fi
-    log "Exited with: ${exitcode}, wait 60 seconds to retry"
-    sleep 60
+    log "Exited with: ${exitcode}"
+    if [ "$wait" != "0" ]; then
+        sleep "$wait"
+    fi
 done

@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+
+import os
+import sys
+import signal
+import socket
+import time
+import icmplib
+import numpy as np
+import argparse
+import logging
+
+PID = os.getpid()
+
+exit_now = False
+
+
+def on_signal(signum, frame):
+    global exit_now
+    exit_now = True
+
+
+signal.signal(signal.SIGINT, on_signal)
+signal.signal(signal.SIGTERM, on_signal)
+
+
+class Statistics:
+    def __init__(self):
+        self.rtt_list = []
+        self.sent = 0
+        self.last = time.monotonic()
+
+
+stat_data = Statistics()
+
+
+def ping(sock, sequence, address, size, timeout):
+    request = icmplib.ICMPRequest(
+        destination=address,
+        id=PID,
+        payload_size=size,
+        sequence=sequence)
+    sock.send(request)
+    stat_data.sent = stat_data.sent + 1
+    reply = sock.receive(request, timeout)
+    reply.raise_for_status()
+    stat_data.rtt_list.append(reply.time - request.time)
+    rtt = (reply.time - request.time) * 1000
+    logging.debug("%s",
+                  f'{reply.bytes_received} bytes from '
+                  f'{reply.source}: '
+                  f'icmp_seq={sequence} '
+                  f'time={round(rtt, 3)} ms')
+
+
+def stats(force=False):
+    global stat_data
+    if not force:
+        now = time.monotonic()
+        if now - stat_data.last < args.stats:
+            return
+    sent = stat_data.sent
+    received = len(stat_data.rtt_list)
+    if sent > 0:
+        logging.info("PING %d packets transmitted, %d received, %.1f%% packet loss",
+                     sent, received, (sent-received)*1e+2/sent)
+    if received > 0:
+        a = np.array(stat_data.rtt_list)
+        logging.info("RTT min=%.3fms avg=%.3fms 90%%=%.3fms 99%%=%.3fms max=%.3fms mdev=%.3fms",
+                     np.min(a)*1e+3,
+                     np.mean(a)*1e+3,
+                     np.percentile(a, 90)*1e+3,
+                     np.percentile(a, 99)*1e+3,
+                     np.max(a)*1e+3,
+                     np.std(a)*1e+3)
+    stat_data = Statistics()
+
+
+def resolve(host):
+    addrinfo = socket.getaddrinfo(host, None)
+    for info in addrinfo:
+        return info[4][0]
+    return None
+
+
+def pingd(args):
+    address = resolve(args.host)
+    logging.info("PING %s: %d data bytes", args.host, args.size)
+    sock = None
+    sequence = 0
+    while not exit_now:
+        try:
+            if sock is None:
+                sock = icmplib.ICMPv4Socket()
+            sequence = sequence + 1
+            if sequence > 65535:
+                sequence = 1
+            ping(sock, sequence, address, args.size, args.timeout)
+            time.sleep(args.interval)
+        except icmplib.TimeoutExceeded:
+            logging.debug("PING %s: icmp_seq=%s timeout",
+                          args.host, sequence)
+        except icmplib.ICMPError as err:
+            logging.debug("PING %s: %s", args.host, err)
+        except Exception as err:
+            logging.warning("Unexpected error: %s", err)
+            sock = None
+        except KeyboardInterrupt:
+            break
+        stats()
+    stats(True)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser("pingd")
+    parser.add_argument(
+        "-i", "--interval", help="interval in seconds", type=int, default=1)
+    parser.add_argument(
+        "-W", "--timeout", help="request timeout in seconds", type=int, default=4)
+    parser.add_argument(
+        "-s", "--size", help="payload size", type=int, default=56)
+    parser.add_argument(
+        "-n", "--stats", help="stats time span in seconds", type=int, default=3600)
+    parser.add_argument(
+        "-l", "--log", help="log filename", type=str)
+    parser.add_argument(
+        "-v", "--verbose", help="be verbose", action='store_true')
+    parser.add_argument("host", help="host to ping", type=str)
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        stream=sys.stdout if args.log is None else open(args.log, "w"),
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s %(levelname)-8s %(message)s",
+        datefmt="%FT%T%z"
+    )
+    pingd(args)

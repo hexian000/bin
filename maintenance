@@ -1,86 +1,125 @@
-#!/bin/sh
+#!/bin/sh -eu
 
-if [ "$(whoami)" != "root" ]; then
-  if [ -n "$(which sudo)" ]; then
-    echo "\$ sudo $0 $*"
-    sudo "$0" "$@"
-  else
-    echo "\$ su -c \"$0 $*\" root"
-    su -c "$0 $*" root
-  fi
-  exit $?
+if [ "$(id -u)" != "0" ]; then
+    if [ -n "$(which sudo)" ]; then
+        echo "\$ sudo $0 $*"
+        sudo "$0" "$@"
+        exit $?
+    else
+        echo "\$ su -c \"$0 $*\" root"
+        su -c "$0 $*" root
+        exit $?
+    fi
 fi
 
 if [ -t 1 ] && [ "$(tput colors)" -ge 16 ] 2>/dev/null; then
-  RED="$(tput setaf 9)"
-  GREEN="$(tput setaf 10)"
-  YELLOW="$(tput setaf 11)"
-  BLUE="$(tput setaf 12)"
-  MAGENTA="$(tput setaf 13)"
-  CYAN="$(tput setaf 14)"
-  RESET="$(tput sgr0)"
+    RED="$(tput setaf 9)"
+    GREEN="$(tput setaf 10)"
+    YELLOW="$(tput setaf 11)"
+    BLUE="$(tput setaf 12)"
+    MAGENTA="$(tput setaf 13)"
+    CYAN="$(tput setaf 14)"
+    RESET="$(tput sgr0)"
 fi
 
-showProgress() {
-  echo "${CYAN}>>> $1...${RESET}"
+run() {
+    echo "${CYAN}+ $@${RESET}"
+    "$@"
 }
 
-tryRun() {
-  $*
-  retcode=$?
-  if [ "$retcode" -ne "0" ]; then
-    echo "${RED}Failed! code: $retcode${RESET}"
-    exit 1
-  fi
+maintenance_apt() {
+    if [ -n "${dry_run}" ]; then
+        run apt update
+        run apt list --upgradable
+        return
+    fi
+
+    run apt update
+    run apt install -f -y
+    run apt dist-upgrade -y
+    run apt autoremove -y
+    run apt autoclean
+    dpkg -l | grep ^rc | awk '{print $2}' |
+        while read packagename; do
+            run dpkg --purge "$packagename"
+        done
 }
 
-dryRunApt() {
-  showProgress "Update catalog"
-  tryRun apt-get update
-  showProgress "List upgradable"
-  tryRun apt list --upgradable
+maintenance_snap() {
+    if [ -n "${dry_run}" ]; then
+        return
+    fi
+
+    run snap refresh
+
+    snap list --all | awk '/disabled/{print $1, $3}' |
+        while read snapname revision; do
+            run snap remove "$snapname" --revision="$revision"
+        done
 }
 
-maintenanceApt() {
-  showProgress "Update catalog"
-  tryRun apt-get update
-  showProgress "Fix missing"
-  tryRun apt-get install -f -y
-  showProgress "Upgrade package"
-  tryRun apt-get dist-upgrade -y
-  showProgress "Remove redudant"
-  tryRun apt-get autoremove -y
-  showProgress "Clean archive"
-  tryRun apt-get autoclean
-  showProgress "Purge configuration"
-  dpkg -l | grep ^rc | awk '{print $2}' |
-    while read packagename; do
-      tryRun dpkg --purge "$packagename"
-    done
+maintenance_yum() {
+    if [ -n "${dry_run}" ]; then
+        return
+    fi
+
+    run yum upgrade
 }
 
-maintenanceSnap() {
-  showProgress "Refresh snaps"
-  snap refresh
+maintenance_pacman() {
+    if [ -n "${dry_run}" ]; then
+        return
+    fi
 
-  showProgress "Remove disabled snaps"
-  snap list --all | awk '/disabled/{print $1, $3}' |
-    while read snapname revision; do
-      tryRun snap remove "$snapname" --revision="$revision"
-    done
+    run pacman -Syu
 }
 
-if [ "$1" = "-d" ] || [ "$1" = "--dry-run" ]; then
-  dryRunApt
-  exit 0
+maintenance_opkg() {
+    if [ -n "${dry_run}" ]; then
+        run opkg update
+        run opkg list-upgradable
+        return
+    fi
+
+    run opkg update
+    opkg list-upgradable | cut -f 1 -d ' ' |
+        while read pkg; do
+            run opkg upgrade "$pkg"
+        done
+}
+
+dry_run=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+    "") ;;
+    "-d" | "--dry-run")
+        dry_run=1
+        ;;
+    *)
+        echo "${RED}Unknown option: $1${RESET}"
+        exit 1
+        ;;
+    esac
+    shift
+done
+
+if command -v apt >/dev/null; then
+    maintenance_apt
 fi
 
-if which apt-get >/dev/null; then
-  maintenanceApt
-else
-  echo "${YELLOW}apt-get command not found${RESET}"
+if command -v snap >/dev/null && pkill -0 snapd; then
+    maintenance_snap
 fi
 
-if which snap >/dev/null && pgrep snapd >/dev/null; then
-  maintenanceSnap
+if command -v yum >/dev/null; then
+    maintenance_yum
+fi
+
+if command -v pacman >/dev/null; then
+    maintenance_pacman
+fi
+
+if command -v opkg >/dev/null; then
+    maintenance_opkg
 fi

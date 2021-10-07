@@ -1,4 +1,4 @@
-#!/bin/sh -eu
+#!/bin/sh -e
 
 if [ "$(id -u)" != "0" ]; then
     if [ -n "$(which sudo)" ]; then
@@ -12,7 +12,7 @@ if [ "$(id -u)" != "0" ]; then
     fi
 fi
 
-if [ -t 1 ] && [ "$(tput colors)" -ge 16 ] 2>/dev/null; then
+if [ -t 1 ] && command -v tput >/dev/null && [ "$(tput colors)" -ge 16 ] 2>/dev/null; then
     RED="$(tput setaf 9)"
     GREEN="$(tput setaf 10)"
     YELLOW="$(tput setaf 11)"
@@ -87,8 +87,6 @@ maintenance_opkg() {
             run opkg upgrade "$pkg"
         done
 }
-
-dry_run=""
 
 while [ $# -gt 0 ]; do
     case "$1" in

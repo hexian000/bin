@@ -77,21 +77,26 @@ def stats(force=False):
     stat_data = Statistics()
 
 
+socket_family = {
+    socket.AddressFamily.AF_INET: icmplib.ICMPv4Socket,
+    socket.AddressFamily.AF_INET6: icmplib.ICMPv6Socket
+}
+
+
 def resolve(host):
     addrinfo = socket.getaddrinfo(host, None)
     for info in addrinfo:
-        return info[0], info[4][0]
-    return None
+        if info[0] in socket_family:
+            return info[0], info[4][0]
+    raise Exception("can't resolve host name: %s" % host)
 
 
-def create_socket(family: socket.AddressFamily):
-    socket_type = {
-        socket.AddressFamily.AF_INET: icmplib.ICMPv4Socket,
-        socket.AddressFamily.AF_INET6: icmplib.ICMPv6Socket
-    }.get(family)
-    if socket_type is not None:
-        return socket_type(privileged=False)
-    return None
+def is_root():
+    return os.geteuid() == 0
+
+
+def create_socket(family):
+    return socket_family.get(family)(privileged=is_root())
 
 
 def try_ping(args, sock, sequence, address):
@@ -107,13 +112,10 @@ def try_ping(args, sock, sequence, address):
 
 def main(args):
     sequence = 0
-    logging.info("PING %s: %d data bytes", args.host, args.size)
     try:
         address_info = resolve(args.host)
-        if address_info is None:
-            logging.error("getaddrinfo returns empty")
-            return
         sock = create_socket(address_info[0])
+        logging.info("PING %s: %d data bytes", args.host, args.size)
         while True:
             sequence = sequence + 1
             if sequence > 65535:

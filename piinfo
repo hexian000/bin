@@ -480,6 +480,8 @@ if __name__ == "__main__":
     clock_tick = os.sysconf("SC_CLK_TCK")
 
     parser = argparse.ArgumentParser("piinfo")
+    parser.add_argument("-l", "--login", help="motd mode",
+                        action='store_true')
     parser.add_argument("-w", "--watch", help="watch mode",
                         action='store_true')
     parser.add_argument("-i", "--interval",
@@ -487,7 +489,7 @@ if __name__ == "__main__":
     global args
     args = parser.parse_args()
     global is_motd
-    is_motd = "motd" in sys.argv[0]
+    is_motd = args.login or ("motd" in sys.argv[0])
 
     if args.watch:
         import curses

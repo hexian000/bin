@@ -99,14 +99,14 @@ def create_socket(family):
     return socket_family.get(family)(privileged=is_root())
 
 
-def try_ping(args, sock, sequence, address):
+def try_ping(host_str, sock, sequence, address, size, timeout):
     try:
-        ping(sock, sequence, address, args.size, args.timeout)
+        ping(sock, sequence, address, size, timeout)
     except icmplib.ICMPError as err:
-        logging.debug("PING %s: %s", args.host, err)
+        logging.debug("PING %s: %s", host_str, err)
     except icmplib.TimeoutExceeded:
         logging.debug("PING %s: icmp_seq=%s timeout",
-                      args.host, sequence)
+                      host_str, sequence)
     stats()
 
 
@@ -115,12 +115,16 @@ def main(args):
     try:
         address_info = resolve(args.host)
         sock = create_socket(address_info[0])
-        logging.info("PING %s: %d data bytes", args.host, args.size)
+        host_str = args.host
+        if args.host != address_info[1]:
+            host_str = "%s (%s)" % (args.host, address_info[1])
+        logging.info("PING %s: %d data bytes", host_str, args.size)
         while True:
             sequence = sequence + 1
             if sequence > 65535:
                 sequence = 1
-            try_ping(args, sock, sequence, address_info[1])
+            try_ping(host_str, sock, sequence,
+                     address_info[1], args.size, args. timeout)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         pass

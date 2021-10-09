@@ -91,7 +91,7 @@ def pingd(args):
     while not exit_now:
         try:
             if sock is None:
-                sock = icmplib.ICMPv4Socket()
+                sock = icmplib.ICMPv4Socket(privileged=False)
             sequence = sequence + 1
             if sequence > 65535:
                 sequence = 1

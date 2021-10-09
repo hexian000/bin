@@ -140,7 +140,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-s", "--size", help="payload size", type=int, default=56)
     parser.add_argument(
-        "-n", "--stats", help="stats time span in seconds", type=int, default=3600)
+        "-n", "--stats", help="stats time span in seconds", type=int, default=7200)
     parser.add_argument(
         "-l", "--log", help="log filename", type=str)
     parser.add_argument(

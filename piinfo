@@ -7,7 +7,6 @@ import os
 import os.path
 import math
 import time
-import curses
 from datetime import datetime, timedelta
 
 
@@ -445,6 +444,7 @@ def render_loop(stdscr):
 
 
 def watch_main():
+    print("%s = %d" % ("SC_CLK_TCK", clock_tick))
     global stat
     stat = Stat()
     try:
@@ -458,7 +458,7 @@ def watch_main():
 def main():
     now = datetime.now().astimezone()
     lines = []
-    if args.login:
+    if is_motd:
         lines.append("")
         lines.append("System information as of %s" %
                      now.isoformat(timespec="seconds"))
@@ -469,7 +469,7 @@ def main():
     lines.extend(s_uptime(now))
     lines.extend(s_temp())
     for line in lines:
-        if args.login:
+        if is_motd:
             print("  " + line)
         else:
             print(line)
@@ -478,7 +478,6 @@ def main():
 if __name__ == "__main__":
     global clock_tick
     clock_tick = os.sysconf("SC_CLK_TCK")
-    # print("%s = %d" % ("SC_CLK_TCK", clock_tick))
 
     parser = argparse.ArgumentParser("piinfo")
     parser.add_argument("-w", "--watch", help="watch mode",
@@ -487,11 +486,11 @@ if __name__ == "__main__":
                         help="watch interval in seconds", type=int, default=10)
     global args
     args = parser.parse_args()
-
-    if "motd" in sys.argv[0]:
-        args.login = True
+    global is_motd
+    is_motd = "motd" in sys.argv[0]
 
     if args.watch:
+        import curses
         watch_main()
     else:
         main()

@@ -234,14 +234,13 @@ def s_fsusage(path):
     unavail = vfs.f_blocks - vfs.f_bavail
 
     usage = unavail / vfs.f_blocks
-    usage_str = "%-20s  %s / %s (%.1f%%)" % (
+    usage_str = "%-20s  %s / %s (%.1f%%%s)" % (
         "Usage of %s:" % path,
         s_value("%.2f %s", unavail * vfs.f_bsize, size_unit),
         s_value("%.2f %s", vfs.f_blocks * vfs.f_bsize, size_unit),
-        usage*1e+2
+        usage*1e+2,
+        " !" if usage >= 0.9 else ""
     )
-    if usage >= 0.9:
-        usage_str = usage_str + " (!)"
     return [usage_str]
 
 

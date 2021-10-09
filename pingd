@@ -12,12 +12,13 @@ import logging
 
 PID = os.getpid()
 
-exit_now = False
+
+class InterruptedException(Exception):
+    pass
 
 
-def on_signal(signum, frame):
-    global exit_now
-    exit_now = True
+def on_signal(signum, frame) -> None:
+    raise InterruptedException()
 
 
 signal.signal(signal.SIGINT, on_signal)
@@ -79,35 +80,52 @@ def stats(force=False):
 def resolve(host):
     addrinfo = socket.getaddrinfo(host, None)
     for info in addrinfo:
-        return info[4][0]
+        return info[0], info[4][0]
     return None
 
 
-def pingd(args):
-    address = resolve(args.host)
-    logging.info("PING %s: %d data bytes", args.host, args.size)
-    sock = None
+def create_socket(family: socket.AddressFamily):
+    socket_type = {
+        socket.AddressFamily.AF_INET: icmplib.ICMPv4Socket,
+        socket.AddressFamily.AF_INET6: icmplib.ICMPv6Socket
+    }.get(family)
+    if socket_type is not None:
+        return socket_type(privileged=False)
+    return None
+
+
+def try_ping(args, sock, sequence, address):
+    try:
+        ping(sock, sequence, address, args.size, args.timeout)
+    except icmplib.ICMPError as err:
+        logging.debug("PING %s: %s", args.host, err)
+    except icmplib.TimeoutExceeded:
+        logging.debug("PING %s: icmp_seq=%s timeout",
+                      args.host, sequence)
+    stats()
+
+
+def main(args):
     sequence = 0
-    while not exit_now:
-        try:
-            if sock is None:
-                sock = icmplib.ICMPv4Socket(privileged=False)
+    logging.info("PING %s: %d data bytes", args.host, args.size)
+    try:
+        address_info = resolve(args.host)
+        if address_info is None:
+            logging.error("getaddrinfo returns empty")
+            return
+        sock = create_socket(address_info[0])
+        while True:
             sequence = sequence + 1
             if sequence > 65535:
                 sequence = 1
-            ping(sock, sequence, address, args.size, args.timeout)
+            try_ping(args, sock, sequence, address_info[1])
             time.sleep(args.interval)
-        except icmplib.TimeoutExceeded:
-            logging.debug("PING %s: icmp_seq=%s timeout",
-                          args.host, sequence)
-        except icmplib.ICMPError as err:
-            logging.debug("PING %s: %s", args.host, err)
-        except Exception as err:
-            logging.warning("Unexpected error: %s", err)
-            sock = None
-        except KeyboardInterrupt:
-            break
-        stats()
+    except KeyboardInterrupt:
+        pass
+    except InterruptedException:
+        pass
+    except Exception as err:
+        logging.error("pingd: %s", err)
     stats(True)
 
 
@@ -134,4 +152,4 @@ if __name__ == "__main__":
         format="%(asctime)s %(levelname)-8s %(message)s",
         datefmt="%FT%T%z"
     )
-    pingd(args)
+    main(args)

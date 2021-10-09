@@ -142,13 +142,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "-l", "--log", help="log filename", type=str)
     parser.add_argument(
-        "-v", "--verbose", help="be verbose", action='store_true')
+        "-v", "--verbose", help="write verbose log to file", action='store_true')
     parser.add_argument("host", help="host to ping", type=str)
     args = parser.parse_args()
 
+    log_stream = sys.stdout
+    log_level = logging.DEBUG
+    if args.log is not None:
+        log_stream = open(args.log, "w")
+        log_level = logging.DEBUG if args.verbose else logging.INFO
+
     logging.basicConfig(
-        stream=sys.stdout if args.log is None else open(args.log, "w"),
-        level=logging.DEBUG if args.verbose else logging.INFO,
+        stream=log_stream,
+        level=log_level,
         format="%(asctime)s %(levelname)-8s %(message)s",
         datefmt="%FT%T%z"
     )

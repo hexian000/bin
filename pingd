@@ -78,16 +78,20 @@ def stats(force=False):
 
 
 socket_family = {
-    socket.AddressFamily.AF_INET: icmplib.ICMPv4Socket,
-    socket.AddressFamily.AF_INET6: icmplib.ICMPv6Socket
+    socket.AF_INET: icmplib.ICMPv4Socket,
+    socket.AF_INET6: icmplib.ICMPv6Socket
 }
 
 
-def resolve(host):
-    addrinfo = socket.getaddrinfo(host, None)
-    for info in addrinfo:
-        if info[0] in socket_family:
-            return info[0], info[4][0]
+def resolve(host, family=None):
+    if family is not None:
+        for info in socket.getaddrinfo(host, None, family):
+            if info[1] == socket.SOCK_RAW and info[0] == family:
+                return info[0], info[4][0]
+    else:
+        for info in socket.getaddrinfo(host):
+            if info[1] == socket.SOCK_RAW and info[0] in socket_family:
+                return info[0], info[4][0]
     raise Exception("can't resolve host name: %s" % host)
 
 
@@ -112,19 +116,24 @@ def try_ping(host_str, sock, sequence, address, size, timeout):
 
 def main(args):
     sequence = 0
+    family = None
+    if args.ipv6:
+        family = socket.AF_INET6
+    elif args.ipv4:
+        family = socket.AF_INET
     try:
-        address_info = resolve(args.host)
-        sock = create_socket(address_info[0])
+        family, address = resolve(args.host, family)
+        sock = create_socket(family)
         host_str = args.host
-        if args.host != address_info[1]:
-            host_str = "%s (%s)" % (args.host, address_info[1])
+        if args.host != address:
+            host_str = "%s (%s)" % (args.host, address)
         logging.info("PING %s: %d data bytes", host_str, args.size)
         while True:
             sequence = sequence + 1
             if sequence > 65535:
                 sequence = 1
             try_ping(host_str, sock, sequence,
-                     address_info[1], args.size, args. timeout)
+                     address, args.size, args. timeout)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         pass
@@ -137,6 +146,10 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("pingd")
+    parser.add_argument(
+        "-4", "--ipv4", help="use ipv4", default=True, action='store_true')
+    parser.add_argument(
+        "-6", "--ipv6", help="use ipv6", action='store_true')
     parser.add_argument(
         "-i", "--interval", help="interval in seconds", type=int, default=1)
     parser.add_argument(

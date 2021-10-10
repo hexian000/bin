@@ -6,6 +6,8 @@ import signal
 import sys
 import logging
 
+from icmplib.exceptions import ICMPSocketError
+
 nohup = False
 
 
@@ -57,7 +59,7 @@ def ping(sock, sequence, address, size, timeout):
                   f'time={round(rtt, 3)} ms')
 
 
-def print_stats(force=False):
+def update_stats(force=False):
     global stat_data
     if stat_data is None:
         return
@@ -94,15 +96,10 @@ def try_ping(host_str, sock, sequence, address, size, timeout):
     except icmplib.TimeoutExceeded:
         logging.debug("PING %s: icmp_seq=%s timeout",
                       host_str, sequence)
-    print_stats()
+    update_stats()
 
 
-def main(args):
-    supported_af = {
-        socket.AF_INET: icmplib.ICMPv4Socket,
-        socket.AF_INET6: icmplib.ICMPv6Socket
-    }
-
+def create_socket(args):
     def resolve(host, family=None):
         if family is not None:
             for info in socket.getaddrinfo(host, None, family):
@@ -110,9 +107,12 @@ def main(args):
                     return info[0], info[4][0]
         else:
             for info in socket.getaddrinfo(host):
-                if info[1] == socket.SOCK_RAW and info[0] in supported_af:
+                if info[1] == socket.SOCK_RAW and info[0] in {
+                    socket.AF_INET,
+                    socket.AF_INET6
+                }:
                     return info[0], info[4][0]
-        raise Exception("can't resolve host name: %s" % host)
+        raise Exception("no proper address for ping")
 
     family = None
     if args.ipv6:
@@ -120,29 +120,52 @@ def main(args):
     elif args.ipv4:
         family = socket.AF_INET
 
-    family, address = resolve(args.host, family)
-    sock = supported_af[family](privileged=is_root())
+    try:
+        family, address = resolve(args.host, family)
+    except Exception as err:
+        logging.error("resolve %s: %s", args.host, err)
+        return None, None, args.host
+    if family == socket.AF_INET:
+        sock = icmplib.ICMPv4Socket(privileged=is_root())
+        sock.broadcast = args.broadcast
+    else:
+        sock = icmplib.ICMPv6Socket(privileged=is_root())
     host_str = args.host
     if args.host != address:
         host_str = "%s (%s)" % (args.host, address)
+    return sock, address, host_str
 
-    logging.info("PING %s: %d data bytes", host_str, args.size)
+
+def main(args):
+    sock, address, host_str = None, None, None
+    last_host_str = None
     sequence = 0
     try:
         while True:
             sequence = sequence + 1
             if sequence > 65535:
                 sequence = 1
-            try_ping(host_str, sock, sequence,
-                     address, args.size, args. timeout)
+            if sock is None:
+                sock, address, host_str = create_socket(args)
+                if host_str != last_host_str:
+                    logging.info("PING %s: %d data bytes",
+                                 host_str, args.size)
+                    last_host_str = host_str
+            if sock is not None:
+                try:
+                    ping(sock, sequence, address, args.size, args.timeout)
+                except icmplib.ICMPError as err:
+                    logging.debug("PING %s: %s", host_str, err)
+                except icmplib.TimeoutExceeded:
+                    logging.debug("PING %s: icmp_seq=%s timeout",
+                                  host_str, sequence)
+                except icmplib.ICMPSocketError as err:
+                    logging.error("socket error: %s", err)
+                    sock = None
+                update_stats()
             time.sleep(args.interval)
-    except KeyboardInterrupt:
-        pass
-    except InterruptedException:
-        pass
-    except Exception as err:
-        logging.error("pingd: %s", err)
-    print_stats(True)
+    except (KeyboardInterrupt, InterruptedException):
+        update_stats(True)
 
 
 def fork_daemon():
@@ -161,6 +184,8 @@ if __name__ == "__main__":
         "-4", "--ipv4", help="use ipv4", default=True, action='store_true')
     parser.add_argument(
         "-6", "--ipv6", help="use ipv6", action='store_true')
+    parser.add_argument(
+        "-b", "--broadcast", help="allow pinging broadcast", action='store_true')
     parser.add_argument(
         "-i", "--interval", help="interval in seconds", type=int, default=1)
     parser.add_argument(
@@ -192,8 +217,11 @@ if __name__ == "__main__":
         datefmt="%FT%T%z"
     )
 
-    import socket
-    import time
-    import icmplib
-    import numpy as np
-    main(args)
+    try:
+        import socket
+        import time
+        import icmplib
+        import numpy as np
+        main(args)
+    except Exception:
+        logging.exception("pingd: unexpected error")

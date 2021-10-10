@@ -89,7 +89,7 @@ socket_family = {
 
 def resolve(host, family=None):
     if family is not None:
-        for info in socket.getaddrinfo(host=host, family=family):
+        for info in socket.getaddrinfo(host, None, family):
             if info[1] == socket.SOCK_RAW and info[0] == family:
                 return info[0], info[4][0]
     else:

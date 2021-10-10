@@ -11,6 +11,7 @@ import argparse
 import logging
 
 PID = os.getpid()
+nohup = False
 
 
 class InterruptedException(Exception):
@@ -18,11 +19,14 @@ class InterruptedException(Exception):
 
 
 def on_signal(signum, frame) -> None:
+    if nohup and signum == signal.SIGHUP:
+        return
     raise InterruptedException()
 
 
 signal.signal(signal.SIGINT, on_signal)
 signal.signal(signal.SIGTERM, on_signal)
+signal.signal(signal.SIGHUP, on_signal)
 
 
 class Statistics:
@@ -85,7 +89,7 @@ socket_family = {
 
 def resolve(host, family=None):
     if family is not None:
-        for info in socket.getaddrinfo(host, None, family):
+        for info in socket.getaddrinfo(host=host, family=family):
             if info[1] == socket.SOCK_RAW and info[0] == family:
                 return info[0], info[4][0]
     else:
@@ -144,8 +148,18 @@ def main(args):
     stats(True)
 
 
+def fork_daemon():
+    global nohup
+    nohup = True
+    pid = os.fork()
+    if pid == 0:
+        return
+    print("PID %d" % pid)
+    sys.exit()
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser("pingd")
+    parser = argparse.ArgumentParser(description="ICMP ping test daemon")
     parser.add_argument(
         "-4", "--ipv4", help="use ipv4", default=True, action='store_true')
     parser.add_argument(
@@ -165,9 +179,12 @@ if __name__ == "__main__":
     parser.add_argument("host", help="host to ping", type=str)
     args = parser.parse_args()
 
-    log_stream = sys.stdout
-    log_level = logging.DEBUG
-    if args.log is not None:
+    if args.log is None:
+        # debug mode
+        log_stream = sys.stdout
+        log_level = logging.DEBUG
+    else:
+        fork_daemon()
         log_stream = open(args.log, "w")
         log_level = logging.DEBUG if args.verbose else logging.INFO
 

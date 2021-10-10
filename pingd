@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 
-import os
-import sys
-import signal
-import socket
-import time
-import icmplib
-import numpy as np
 import argparse
+import os
+import signal
+import sys
 import logging
 
-PID = os.getpid()
 nohup = False
 
 
@@ -21,6 +16,7 @@ class InterruptedException(Exception):
 def on_signal(signum, frame) -> None:
     if nohup and signum == signal.SIGHUP:
         return
+    logging.info("Got signal %d, exiting..." % signum)
     raise InterruptedException()
 
 
@@ -36,13 +32,16 @@ class Statistics:
         self.last = time.monotonic()
 
 
-stat_data = Statistics()
+stat_data: Statistics = None
 
 
 def ping(sock, sequence, address, size, timeout):
+    global stat_data
+    if stat_data is None:
+        stat_data = Statistics()
     request = icmplib.ICMPRequest(
         destination=address,
-        id=PID,
+        id=os.getpid(),
         payload_size=size,
         sequence=sequence)
     sock.send(request)
@@ -58,8 +57,10 @@ def ping(sock, sequence, address, size, timeout):
                   f'time={round(rtt, 3)} ms')
 
 
-def stats(force=False):
+def print_stats(force=False):
     global stat_data
+    if stat_data is None:
+        return
     if not force:
         now = time.monotonic()
         if now - stat_data.last < args.stats:
@@ -81,30 +82,8 @@ def stats(force=False):
     stat_data = Statistics()
 
 
-socket_family = {
-    socket.AF_INET: icmplib.ICMPv4Socket,
-    socket.AF_INET6: icmplib.ICMPv6Socket
-}
-
-
-def resolve(host, family=None):
-    if family is not None:
-        for info in socket.getaddrinfo(host, None, family):
-            if info[1] == socket.SOCK_RAW and info[0] == family:
-                return info[0], info[4][0]
-    else:
-        for info in socket.getaddrinfo(host):
-            if info[1] == socket.SOCK_RAW and info[0] in socket_family:
-                return info[0], info[4][0]
-    raise Exception("can't resolve host name: %s" % host)
-
-
 def is_root():
     return os.geteuid() == 0
-
-
-def create_socket(family):
-    return socket_family.get(family)(privileged=is_root())
 
 
 def try_ping(host_str, sock, sequence, address, size, timeout):
@@ -115,23 +94,41 @@ def try_ping(host_str, sock, sequence, address, size, timeout):
     except icmplib.TimeoutExceeded:
         logging.debug("PING %s: icmp_seq=%s timeout",
                       host_str, sequence)
-    stats()
+    print_stats()
 
 
 def main(args):
-    sequence = 0
+    supported_af = {
+        socket.AF_INET: icmplib.ICMPv4Socket,
+        socket.AF_INET6: icmplib.ICMPv6Socket
+    }
+
+    def resolve(host, family=None):
+        if family is not None:
+            for info in socket.getaddrinfo(host, None, family):
+                if info[1] == socket.SOCK_RAW and info[0] == family:
+                    return info[0], info[4][0]
+        else:
+            for info in socket.getaddrinfo(host):
+                if info[1] == socket.SOCK_RAW and info[0] in supported_af:
+                    return info[0], info[4][0]
+        raise Exception("can't resolve host name: %s" % host)
+
     family = None
     if args.ipv6:
         family = socket.AF_INET6
     elif args.ipv4:
         family = socket.AF_INET
+
+    family, address = resolve(args.host, family)
+    sock = supported_af[family](privileged=is_root())
+    host_str = args.host
+    if args.host != address:
+        host_str = "%s (%s)" % (args.host, address)
+
+    logging.info("PING %s: %d data bytes", host_str, args.size)
+    sequence = 0
     try:
-        family, address = resolve(args.host, family)
-        sock = create_socket(family)
-        host_str = args.host
-        if args.host != address:
-            host_str = "%s (%s)" % (args.host, address)
-        logging.info("PING %s: %d data bytes", host_str, args.size)
         while True:
             sequence = sequence + 1
             if sequence > 65535:
@@ -145,7 +142,7 @@ def main(args):
         pass
     except Exception as err:
         logging.error("pingd: %s", err)
-    stats(True)
+    print_stats(True)
 
 
 def fork_daemon():
@@ -194,4 +191,9 @@ if __name__ == "__main__":
         format="%(asctime)s %(levelname)-8s %(message)s",
         datefmt="%FT%T%z"
     )
+
+    import socket
+    import time
+    import icmplib
+    import numpy as np
     main(args)

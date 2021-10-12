@@ -6,25 +6,18 @@ import signal
 import sys
 import logging
 
-from icmplib.exceptions import ICMPSocketError
-
-nohup = False
-
 
 class InterruptedException(Exception):
     pass
 
 
 def on_signal(signum, frame) -> None:
-    if nohup and signum == signal.SIGHUP:
-        return
     logging.info("Got signal %d, exiting..." % signum)
     raise InterruptedException()
 
 
 signal.signal(signal.SIGINT, on_signal)
 signal.signal(signal.SIGTERM, on_signal)
-signal.signal(signal.SIGHUP, on_signal)
 
 
 class Statistics:
@@ -168,16 +161,6 @@ def main(args):
         update_stats(True)
 
 
-def fork_daemon():
-    global nohup
-    nohup = True
-    pid = os.fork()
-    if pid == 0:
-        return
-    print("PID %d" % pid)
-    sys.exit()
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ICMP ping test daemon")
     parser.add_argument(
@@ -206,7 +189,6 @@ if __name__ == "__main__":
         log_stream = sys.stdout
         log_level = logging.DEBUG
     else:
-        fork_daemon()
         log_stream = open(args.log, "w")
         log_level = logging.DEBUG if args.verbose else logging.INFO
 

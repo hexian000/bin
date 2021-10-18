@@ -41,10 +41,10 @@ def portal_check():
 def set_led(on):
     if on:
         logging.debug("turning LED on")
-        os.system("echo 1 >/sys/class/leds/led1/brightness")
+        os.system("echo -n 1 | sudo tee /sys/class/leds/led1/brightness >/dev/null")
     else:
         logging.debug("turning LED off")
-        os.system("echo 0 >/sys/class/leds/led1/brightness")
+        os.system("echo -n 0 | sudo tee /sys/class/leds/led1/brightness >/dev/null")
 
 
 def daemon():

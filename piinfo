@@ -484,7 +484,7 @@ if __name__ == "__main__":
     parser.add_argument("-w", "--watch", help="watch mode",
                         action='store_true')
     parser.add_argument("-i", "--interval",
-                        help="watch interval in seconds", type=int, default=10)
+                        help="watch interval in seconds", type=int, default=5)
     global args
     args = parser.parse_args()
     global is_motd

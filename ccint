@@ -9,8 +9,8 @@ fi
 shift
 base="$(basename "${script}" .cc)"
 
+# prefer memory
 if [ -d "/dev/shm" ]; then
-    # prefer memory
     temp="$(mktemp -p /dev/shm -d)"
 elif [ -d "/run/shm" ]; then
     temp="$(mktemp -p /run/shm -d)"
@@ -18,9 +18,12 @@ else
     temp="$(mktemp -d)"
 fi
 
-if which "clang++" >/dev/null 2>&1; then
-    # prefer clang
-    CXX="clang++"
+if [ -z "${CXX}" ]; then
+    if CXX="$(command -v g++)"; then
+        :
+    elif CXX="$(command -v clang++)"; then
+        :
+    fi
 fi
 
 if [ "${CXXFLAGS}" = "" ]; then
@@ -32,7 +35,7 @@ if [ "${LDFLAGS}" = "" ]; then
     LDFLAGS="-lm -lrt -lpthread -ldl"
 fi
 
-# printf "+ ${CXX} ${CXXFLAGS} -o \"${temp}/${base}\" \"${script}\" ${LDFLAGS}\n"
+echo "+ ${CXX} ${CXXFLAGS} -o \"${temp}/${base}\" \"${script}\" ${LDFLAGS}"
 if ! ${CXX} ${CXXFLAGS} -o "${temp}/${base}" "${script}" ${LDFLAGS}; then
     rm -r "${temp}"
     exit 1

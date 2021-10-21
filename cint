@@ -8,30 +8,33 @@ fi
 shift
 base="$(basename "${script}" .c)"
 
+# prefer memory
 if [ -d "/dev/shm" ]; then
-	# prefer memory
 	temp="$(mktemp -p /dev/shm -d)"
 elif [ -d "/run/shm" ]; then
-    temp="$(mktemp -p /run/shm -d)"
+	temp="$(mktemp -p /run/shm -d)"
 else
 	temp="$(mktemp -d)"
 fi
 
-if which "clang" >/dev/null 2>&1; then
-    # prefer clang
-    CC="clang"
+if [ -z "${CC}" ]; then
+	if CC="$(command -v gcc)"; then
+		:
+	elif CC="$(command -v clang)"; then
+		:
+	fi
 fi
 
-if [ "${CFLAGS}" = "" ]; then
+if [ -z "${CFLAGS}" ]; then
 	CFLAGS="-pipe -pedantic -Wall -Wextra -Werror -O3"
 fi
 
-if [ "${LDFLAGS}" = "" ]; then
+if [ -z "${LDFLAGS}" ]; then
 	# try link common libs
 	LDFLAGS="-lm -lrt -lpthread -ldl"
 fi
 
-# printf "+ ${CC} ${CFLAGS} -o \"${temp}/${base}\" \"${script}\" ${LDFLAGS}\n"
+echo "+ ${CC} ${CFLAGS} -o \"${temp}/${base}\" \"${script}\" ${LDFLAGS}"
 if ! ${CC} ${CFLAGS} -o "${temp}/${base}" "${script}" ${LDFLAGS}; then
 	rm -r "${temp}"
 	exit 1

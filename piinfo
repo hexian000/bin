@@ -216,17 +216,24 @@ def s_meminfo():
 
 
 def p_temp(stdscr):
-    temp = int(read_node("/sys/class/thermal/thermal_zone0/temp")) / 1000.0
-    stdscr.addstr("%-20s  " % ("Temperature"), curses.color_pair(3))
-    stdscr.addstr("%.1f C\n" % (temp), curses.color_pair(1))
+    try:
+        temp = int(read_node("/sys/class/thermal/thermal_zone0/temp")) / 1000.0
+        stdscr.addstr("%-20s  " % ("Temperature"), curses.color_pair(3))
+        stdscr.addstr("%.1f C\n" % (temp), curses.color_pair(1))
+    except:
+        pass
 
 
 def s_temp():
-    temp = int(read_node("/sys/class/thermal/thermal_zone0/temp")) / 1000.0
-    temp_str = "%-20s  %.1f C" % ("Temperature:", temp)
-    if temp >= 60.0:
-        temp_str = temp_str + " (!)"
-    return [temp_str]
+    try:
+        temp = int(read_node("/sys/class/thermal/thermal_zone0/temp")) / 1000.0
+        temp_str = "%-20s  %.1f C" % ("Temperature:", temp)
+        if temp >= 60.0:
+            temp_str = temp_str + " (!)"
+        return [temp_str]
+    except:
+        pass
+    return []
 
 
 def s_fsusage(path):

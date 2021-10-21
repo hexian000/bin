@@ -26,11 +26,11 @@ if [ -z "${CXX}" ]; then
     fi
 fi
 
-if [ "${CXXFLAGS}" = "" ]; then
+if [ -z "${CXXFLAGS}" ]; then
     CXXFLAGS="-pipe -pedantic -Wall -Wextra -O3"
 fi
 
-if [ "${LDFLAGS}" = "" ]; then
+if [ -z "${LDFLAGS}" ]; then
     # try link common libs
     LDFLAGS="-lm -lrt -lpthread -ldl"
 fi

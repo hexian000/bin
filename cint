@@ -17,11 +17,16 @@ else
 	temp="$(mktemp -d)"
 fi
 
+if [ ! -d "${temp}" ]; then
+	echo "failed to create \"${temp}\""
+	exit 1
+fi
+
 if [ -z "${CC}" ]; then
-	if CC="$(command -v gcc)"; then
-		:
-	elif CC="$(command -v clang)"; then
-		:
+	if command -v "gcc" >/dev/null 2>&1; then
+		CC="gcc"
+	elif command -v "clang" >/dev/null 2>&1; then
+		CC="clang"
 	fi
 fi
 

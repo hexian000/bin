@@ -18,11 +18,16 @@ else
     temp="$(mktemp -d)"
 fi
 
+if [ ! -d "${temp}" ]; then
+    echo "failed to create \"${temp}\""
+    exit 1
+fi
+
 if [ -z "${CXX}" ]; then
-    if CXX="$(command -v g++)"; then
-        :
-    elif CXX="$(command -v clang++)"; then
-        :
+    if command -v "g++" >/dev/null 2>&1; then
+        CXX="g++"
+    elif command -v "clang++" >/dev/null 2>&1; then
+        CXX="clang++"
     fi
 fi
 

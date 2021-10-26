@@ -2,12 +2,22 @@
 
 import argparse
 import re
+import signal
 import sys
 import os
 import os.path
 import math
 import time
 from datetime import datetime, timedelta
+
+
+def on_signal(signum, frame) -> None:
+    raise InterruptedError()
+
+
+signal.signal(signal.SIGHUP, on_signal)
+signal.signal(signal.SIGINT, on_signal)
+signal.signal(signal.SIGTERM, on_signal)
 
 
 def get_btime():
@@ -457,6 +467,8 @@ def watch_main():
         stat.sample()
         time.sleep(args.interval)
         curses.wrapper(render_loop)
+    except InterruptedError:
+        pass
     except KeyboardInterrupt:
         pass
 

@@ -128,7 +128,10 @@ def p_meminfo(stdscr):
     swap_used_kb = swap_total_kb - swap_free_kb
     usage = mem_used_kb / mem_total_kb
     dirty_ratio = (dirty_kb+writeback_kb) / mem_available_kb
-    swap_usage = swap_used_kb / swap_total_kb
+    if swap_total_kb > 0:
+        swap_usage = swap_used_kb / swap_total_kb
+    else:
+        swap_usage = 0.0
     commit_charge = commit_kb / mem_total_kb
     commit_usage = commit_kb / commit_limit_kb
 
@@ -149,13 +152,15 @@ def p_meminfo(stdscr):
                  (dirty_ratio * 100.0), dirty_ratio, 0.05, 0.2)
     stdscr.addstr(" )\n", curses.color_pair(1))
 
-    stdscr.addstr("%-20s  " % ("Swap usage"), curses.color_pair(3))
-    p_value(stdscr, "%.0f %s", swap_used_kb*1024.0, size_unit, 5)
-    stdscr.addstr(" / ", curses.color_pair(1))
-    p_value(stdscr, "%.0f %s", swap_total_kb*1024.0, size_unit, 2)
-    stdscr.addstr(" ( ", curses.color_pair(1))
-    p_rangecolor(stdscr, "%.0f%%" % (swap_usage * 100.0), swap_usage, 0.5, 0.8)
-    stdscr.addstr(" )\n", curses.color_pair(1))
+    if swap_total_kb > 0:
+        stdscr.addstr("%-20s  " % ("Swap usage"), curses.color_pair(3))
+        p_value(stdscr, "%.0f %s", swap_used_kb*1024.0, size_unit, 5)
+        stdscr.addstr(" / ", curses.color_pair(1))
+        p_value(stdscr, "%.0f %s", swap_total_kb*1024.0, size_unit, 2)
+        stdscr.addstr(" ( ", curses.color_pair(1))
+        p_rangecolor(stdscr, "%.0f%%" %
+                     (swap_usage * 100.0), swap_usage, 0.5, 0.8)
+        stdscr.addstr(" )\n", curses.color_pair(1))
 
     stdscr.addstr("%-20s  " % ("Commit charge"), curses.color_pair(3))
     p_value(stdscr, "%.0f %s", commit_kb*1024.0, size_unit, 5)
@@ -185,7 +190,10 @@ def s_meminfo():
     swap_used_kb = swap_total_kb - swap_free_kb
     usage = mem_used_kb / mem_total_kb
     dirty_ratio = (dirty_kb+writeback_kb) / mem_available_kb
-    swap_usage = swap_used_kb / swap_total_kb
+    if swap_total_kb > 0:
+        swap_usage = swap_used_kb / swap_total_kb
+    else:
+        swap_usage = 0.0
     commit_charge = commit_kb / mem_total_kb
     commit_usage = commit_kb / commit_limit_kb
 
@@ -206,13 +214,14 @@ def s_meminfo():
             dirty_ratio*1e+2
         ))
 
-    lines.append(
-        "%-20s  %s / %s (%.0f%%)" % (
-            "Swap usage:",
-            s_value("%.0f %s", swap_used_kb*1024.0, size_unit),
-            s_value("%.0f %s", swap_total_kb*1024.0, size_unit),
-            swap_usage*1e+2
-        ))
+    if swap_total_kb > 0:
+        lines.append(
+            "%-20s  %s / %s (%.0f%%)" % (
+                "Swap usage:",
+                s_value("%.0f %s", swap_used_kb*1024.0, size_unit),
+                s_value("%.0f %s", swap_total_kb*1024.0, size_unit),
+                swap_usage*1e+2
+            ))
 
     lines.append(
         "%-20s  %s < %s (%.0f%%, %.0f%%)" % (

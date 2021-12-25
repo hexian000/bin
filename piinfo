@@ -1,25 +1,17 @@
 #!/usr/bin/env lua
 
-local function printf(...)
-    print(string.format(...))
-end
+local function printf(...) print(string.format(...)) end
 
-local function new_writer()
-    local attr = {}
-    return setmetatable({}, {
-        __index = function(t, k)
-            return ({
-                printf = function(self, ...)
-                    local prefix = attr.prefix or ""
-                    return table.insert(self, prefix .. string.format(...))
-                end,
-                setprefix = function(self, prefix)
-                    attr.prefix = prefix
-                end
-            })[k]
-        end
-    })
-end
+local writer_mt = {
+    __index = function(t, k)
+        return ({
+            printf = function(self, ...)
+                local prefix = self.prefix or ""
+                return table.insert(self, prefix .. string.format(...))
+            end
+        })[k]
+    end
+}
 
 local function read(path)
     return assert(io.open(path, "r"), "can't open file: " .. path)
@@ -31,9 +23,7 @@ end
 
 local function walk(iter)
     local t = {}
-    for v in iter do
-        table.insert(t, v)
-    end
+    for v in iter do table.insert(t, v) end
     return t
 end
 
@@ -49,7 +39,7 @@ local function temp(w)
     local f = read("/sys/devices/virtual/thermal/thermal_zone0/temp")
     local raw = tonumber(f:read())
     local celsius = raw * 1e-3
-    w:printf("%-20s  %.02f C", "Temperature:", celsius)
+    w:printf("%-20s  %.01f C", "Temperature:", celsius)
 end
 
 local iec_units = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"}
@@ -60,13 +50,9 @@ local function format_iec(format, x)
     else
         n = 0
     end
-    if n < 0 then
-        n = 0
-    end
+    if n < 0 then n = 0 end
     max = #iec_units - 1
-    if n > max then
-        n = max
-    end
+    if n > max then n = max end
     return string.format(format, x / math.pow(2.0, n * 10.0), iec_units[n + 1])
 end
 
@@ -76,9 +62,7 @@ local function meminfo(w)
     local t = {}
     for line in f:lines() do
         local k, v = string.match(line, pat)
-        if k and v then
-            t[k] = tonumber(v)
-        end
+        if k and v then t[k] = tonumber(v) end
     end
     f:close()
 
@@ -96,22 +80,26 @@ local function meminfo(w)
     local usage = mem_used_kb / mem_total_kb
     local dirty_ratio = (dirty_kb + writeback_kb) / mem_available_kb
     local swap_usage
-    if swap_total_kb > 0 then
-        swap_usage = swap_used_kb / swap_total_kb
-    end
+    if swap_total_kb > 0 then swap_usage = swap_used_kb / swap_total_kb end
     local commit_charge = commit_kb / mem_total_kb
     local commit_usage = commit_kb / commit_limit_kb
 
-    w:printf("%-20s  %s / %s (%.0f%%)", "Memory usage:", format_iec("%.0f %s", mem_used_kb * 1024.0),
-        format_iec("%.0f %s", mem_total_kb * 1024.0), usage * 1e+2)
-    w:printf("%-20s  %s + %s (%.0f%%)", "Memory dirty:", format_iec("%.0f %s", dirty_kb * 1024.0),
-        format_iec("%.0f %s", writeback_kb * 1024.0), dirty_ratio * 1e+2)
+    w:printf("%-20s  %s / %s (%.0f%%)", "Memory usage:",
+             format_iec("%.0f %s", mem_used_kb * 1024.0),
+             format_iec("%.0f %s", mem_total_kb * 1024.0), usage * 1e+2)
+    w:printf("%-20s  %s + %s (%.0f%%)", "Memory dirty:",
+             format_iec("%.0f %s", dirty_kb * 1024.0),
+             format_iec("%.0f %s", writeback_kb * 1024.0), dirty_ratio * 1e+2)
     if swap_usage then
-        w:printf("%-20s  %s / %s (%.0f%%)", "Swap usage:", format_iec("%.0f %s", swap_used_kb * 1024.0),
-            format_iec("%.0f %s", swap_total_kb * 1024.0), swap_usage * 1e+2)
+        w:printf("%-20s  %s / %s (%.0f%%)", "Swap usage:",
+                 format_iec("%.0f %s", swap_used_kb * 1024.0),
+                 format_iec("%.0f %s", swap_total_kb * 1024.0),
+                 swap_usage * 1e+2)
     end
-    w:printf("%-20s  %s < %s (%.0f%%, %.0f%%)", "Commit charge:", format_iec("%.0f %s", commit_kb * 1024.0),
-        format_iec("%.0f %s", commit_limit_kb * 1024.0), commit_charge * 1e+2, commit_usage * 1e+2)
+    w:printf("%-20s  %s < %s (%.0f%%, %.0f%%)", "Commit charge:",
+             format_iec("%.0f %s", commit_kb * 1024.0),
+             format_iec("%.0f %s", commit_limit_kb * 1024.0),
+             commit_charge * 1e+2, commit_usage * 1e+2)
 end
 
 local function fsusage(w, mount)
@@ -119,22 +107,19 @@ local function fsusage(w, mount)
     local f = system(string.format("df -P \"%s\"", mount))
     local lines = walk(f:lines())
     f:close()
-    if not lines[2] then
-        return
-    end
+    if not lines[2] then return end
     local pat = "^[^%s]+%s+(%d+)%s+(%d+)%s+(%d+)"
     local total, used, available = string.match(lines[2], pat)
-    if not (total and used and available) then
-        return
-    end
+    if not (total and used and available) then return end
     local usage = used / total
     if usage < 0.9 then
         usage = string.format("%.1f%%", usage * 1e+2)
     else
         usage = string.format("%.1f%% !", usage * 1e+2)
     end
-    w:printf("%-20s  %s / %s (%s)", string.format("Usage of %s:", mount), format_iec("%.2f %s", used * 1024.0),
-        format_iec("%.2f %s", total * 1024.0), usage)
+    w:printf("%-20s  %s / %s (%s)", string.format("Usage of %s:", mount),
+             format_iec("%.2f %s", used * 1024.0),
+             format_iec("%.2f %s", total * 1024.0), usage)
 end
 
 local function uptime(w, now)
@@ -149,9 +134,7 @@ local function uptime(w, now)
         end
     end
     f:close()
-    if not btime then
-        return
-    end
+    if not btime then return end
     local uptime = now - btime
     local days = math.floor(uptime / (24 * 60 * 60))
     uptime = uptime % (24 * 60 * 60)
@@ -160,7 +143,8 @@ local function uptime(w, now)
     local minutes = math.floor(uptime / 60)
     uptime = uptime % 60
     local seconds = uptime
-    w:printf("%-20s  %d days, %02d:%02d:%02d", "Uptime:", days, hours, minutes, seconds)
+    w:printf("%-20s  %d days, %02d:%02d:%02d", "Uptime:", days, hours, minutes,
+             seconds)
 end
 
 local function motd()
@@ -170,17 +154,14 @@ local function motd()
     printf("System information as of %s", os.date("%Y-%m-%dT%T%z", now))
     print()
 
-    local w = new_writer()
-    w:setprefix("  ")
+    local w = setmetatable({prefix = "  "}, writer_mt)
     pcall(loadavg, w)
     pcall(meminfo, w)
     pcall(fsusage, w, "/")
     pcall(fsusage, w, "/home")
     pcall(uptime, w, now)
     pcall(temp, w)
-    for _, line in ipairs(w) do
-        print(line)
-    end
+    for _, line in ipairs(w) do print(line) end
 
     print()
 end

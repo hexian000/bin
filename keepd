@@ -1,7 +1,16 @@
 #!/bin/sh
 
+log() {
+    if [ "$SYSLOG" = "1" ]; then
+        logger -t "keepd" "$*"
+    else
+        echo "$(date -Is) $*" >&2
+    fi
+}
+
 while true; do
-    nohup "$@" </dev/null >/dev/null 2>&1 &
-    wait
-    sleep 2
+    log "start \"$*\""
+    "$@" </dev/null >/dev/null 2>&1
+    log "\"$*\" exited with $?, waiting 10s to restart"
+    sleep 10s
 done

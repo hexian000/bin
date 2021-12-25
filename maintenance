@@ -74,20 +74,6 @@ maintenance_pacman() {
     run pacman -Syu
 }
 
-maintenance_opkg() {
-    if [ -n "${dry_run}" ]; then
-        run opkg update
-        run opkg list-upgradable
-        return
-    fi
-
-    run opkg update
-    opkg list-upgradable | cut -f 1 -d ' ' |
-        while read pkg; do
-            run opkg upgrade "$pkg"
-        done
-}
-
 while [ $# -gt 0 ]; do
     case "$1" in
     "") ;;
@@ -116,8 +102,4 @@ fi
 
 if command -v pacman >/dev/null; then
     maintenance_pacman
-fi
-
-if command -v opkg >/dev/null; then
-    maintenance_opkg
 fi

@@ -1,188 +1,525 @@
-#!/usr/bin/env lua
+#!/usr/bin/env python3
 
-local function printf(...)
-    print(string.format(...))
-end
+import argparse
+import re
+import signal
+import sys
+import os
+import os.path
+import math
+import time
+from datetime import datetime, timedelta
 
-local function new_writer()
-    local attr = {}
-    return setmetatable({}, {
-        __index = function(t, k)
-            return ({
-                printf = function(self, ...)
-                    local prefix = attr.prefix or ""
-                    return table.insert(self, prefix .. string.format(...))
-                end,
-                setprefix = function(self, prefix)
-                    attr.prefix = prefix
-                end
-            })[k]
-        end
-    })
-end
 
-local function read(path)
-    return assert(io.open(path, "r"), "can't open file: " .. path)
-end
+def on_signal(signum, frame) -> None:
+    raise InterruptedError()
 
-local function system(command)
-    return assert(io.popen(command, 'r'), "can't execute command: " .. command)
-end
 
-local function walk(iter)
-    local t = {}
-    for v in iter do
-        table.insert(t, v)
-    end
-    return t
-end
+signal.signal(signal.SIGHUP, on_signal)
+signal.signal(signal.SIGINT, on_signal)
+signal.signal(signal.SIGTERM, on_signal)
 
-local function loadavg(w)
-    local f = read("/proc/loadavg")
-    local line = f:read()
-    f:close()
-    local s = table.concat(walk(string.gmatch(line, "[%d.]+")), " ", 1, 3)
-    w:printf("%-20s  %s", "System load:", s)
-end
 
-local function temp(w)
-    local f = read("/sys/devices/virtual/thermal/thermal_zone0/temp")
-    local raw = tonumber(f:read())
-    local celsius = raw * 1e-3
-    w:printf("%-20s  %.02f C", "Temperature:", celsius)
-end
+def get_btime():
+    with open('/proc/stat') as f:
+        for line in f:
+            if 'btime' in line:
+                return int(line.split()[1])
 
-local iec_units = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"}
-local function format_iec(format, x)
-    local n, max
-    if x > 1 then
-        n = math.floor((math.floor(math.log(x) / math.log(2)) - 3) / 10)
-    else
-        n = 0
-    end
-    if n < 0 then
-        n = 0
-    end
-    max = #iec_units - 1
-    if n > max then
-        n = max
-    end
-    return string.format(format, x / math.pow(2.0, n * 10.0), iec_units[n + 1])
-end
 
-local function meminfo(w)
-    local pat = "^([^:]+):%s*(%d+) kB$"
-    local f = read("/proc/meminfo")
-    local t = {}
-    for line in f:lines() do
-        local k, v = string.match(line, pat)
-        if k and v then
-            t[k] = tonumber(v)
-        end
-    end
-    f:close()
+pat_meminfo = re.compile("^(.+):\\s*(\\d+) kB")
 
-    local mem_total_kb = t["MemTotal"]
-    local mem_available_kb = t["MemAvailable"]
-    local swap_total_kb = t["SwapTotal"]
-    local swap_free_kb = t["SwapFree"]
-    local commit_limit_kb = t["CommitLimit"]
-    local commit_kb = t["Committed_AS"]
-    local dirty_kb = t["Dirty"]
-    local writeback_kb = t["Writeback"]
 
-    local mem_used_kb = mem_total_kb - mem_available_kb
-    local swap_used_kb = swap_total_kb - swap_free_kb
-    local usage = mem_used_kb / mem_total_kb
-    local dirty_ratio = (dirty_kb + writeback_kb) / mem_available_kb
-    local swap_usage
-    if swap_total_kb > 0 then
+def get_meminfo():
+    meminfo = {}
+    with open('/proc/meminfo') as f:
+        for line in f:
+            m = pat_meminfo.match(line)
+            if m is None:
+                continue
+            meminfo[m.group(1)] = int(m.group(2))
+        return meminfo
+
+
+def read_node(path):
+    with open(path, "r") as f:
+        return f.read()
+
+
+def p_rangecolor(stdscr, text, value, low, high):
+    if value <= low:
+        stdscr.addstr(text, curses.color_pair(4))
+    elif value >= high:
+        stdscr.addstr(text, curses.color_pair(6))
+    else:
+        stdscr.addstr(text, curses.color_pair(5))
+
+
+def p_value(stdscr, format, value, unit, color):
+    v, u = make_unit(value, unit)
+    stdscr.addstr(format % (v, u), curses.color_pair(color))
+
+
+def s_value(format, value, unit):
+    v, u = make_unit(value, unit)
+    return format % (v, u)
+
+
+def p_interval(stdscr):
+    stdscr.addstr("=====", curses.color_pair(1))
+    stdscr.addstr(" Every %.1f s " % (args.interval), curses.color_pair(2))
+    stdscr.addstr(
+        "===========================================================\n", curses.color_pair(1))
+
+
+def p_time(stdscr):
+    now = datetime.now().astimezone()
+    stdscr.addstr("%-20s  " % ("Now"), curses.color_pair(3))
+    stdscr.addstr("%s\n" % (now.isoformat(timespec="seconds")),
+                  curses.color_pair(1))
+
+    btime = datetime.fromtimestamp(get_btime()).astimezone()
+    stdscr.addstr("%-20s  " % ("Boot time"), curses.color_pair(3))
+    stdscr.addstr("%s\n" % (btime.isoformat(timespec="seconds")),
+                  curses.color_pair(1))
+
+    uptime = str(timedelta(seconds=math.floor((now - btime).total_seconds())))
+    if os.path.exists("/var/run/reboot-required"):
+        uptime = uptime + " (!)"
+    stdscr.addstr("%-20s  " % ("Uptime"), curses.color_pair(3))
+    stdscr.addstr("%s\n" % (uptime),
+                  curses.color_pair(1))
+
+
+def s_uptime(now):
+    btime = datetime.fromtimestamp(get_btime()).astimezone()
+    uptime = str(timedelta(seconds=math.floor((now - btime).total_seconds())))
+    if os.path.exists("/var/run/reboot-required"):
+        uptime = uptime + " (!)"
+    return ["%-20s  %s" % ("Uptime:", uptime)]
+
+
+def p_loadavg(stdscr):
+    loadavg = read_node("/proc/loadavg").split()[0:3]
+    stdscr.addstr("%-20s  " % ("System load"), curses.color_pair(3))
+    stdscr.addstr("%s\n" % (" ".join(loadavg)), curses.color_pair(1))
+
+
+def s_loadavg():
+    loadavg = read_node("/proc/loadavg").split()[0:3]
+    loadstr = " ".join(loadavg)
+    if float(loadavg[0]) >= os.cpu_count():
+        loadstr = loadstr + " (!)"
+    return ["%-20s  %s" % ("System load:", loadstr)]
+
+
+def p_meminfo(stdscr):
+    meminfo = get_meminfo()
+    mem_total_kb = meminfo["MemTotal"]
+    mem_available_kb = meminfo["MemAvailable"]
+    swap_total_kb = meminfo["SwapTotal"]
+    swap_free_kb = meminfo["SwapFree"]
+    commit_limit_kb = meminfo["CommitLimit"]
+    commit_kb = meminfo["Committed_AS"]
+    dirty_kb = meminfo["Dirty"]
+    writeback_kb = meminfo["Writeback"]
+
+    mem_used_kb = mem_total_kb - mem_available_kb
+    swap_used_kb = swap_total_kb - swap_free_kb
+    usage = mem_used_kb / mem_total_kb
+    dirty_ratio = (dirty_kb+writeback_kb) / mem_available_kb
+    if swap_total_kb > 0:
         swap_usage = swap_used_kb / swap_total_kb
-    end
-    local commit_charge = commit_kb / mem_total_kb
-    local commit_usage = commit_kb / commit_limit_kb
+    else:
+        swap_usage = 0.0
+    commit_charge = commit_kb / mem_total_kb
+    commit_usage = commit_kb / commit_limit_kb
 
-    w:printf("%-20s  %s / %s (%.0f%%)", "Memory usage:", format_iec("%.0f %s", mem_used_kb * 1024.0),
-        format_iec("%.0f %s", mem_total_kb * 1024.0), usage * 1e+2)
-    w:printf("%-20s  %s + %s (%.0f%%)", "Memory dirty:", format_iec("%.0f %s", dirty_kb * 1024.0),
-        format_iec("%.0f %s", writeback_kb * 1024.0), dirty_ratio * 1e+2)
-    if swap_usage then
-        w:printf("%-20s  %s / %s (%.0f%%)", "Swap usage:", format_iec("%.0f %s", swap_used_kb * 1024.0),
-            format_iec("%.0f %s", swap_total_kb * 1024.0), swap_usage * 1e+2)
-    end
-    w:printf("%-20s  %s < %s (%.0f%%, %.0f%%)", "Commit charge:", format_iec("%.0f %s", commit_kb * 1024.0),
-        format_iec("%.0f %s", commit_limit_kb * 1024.0), commit_charge * 1e+2, commit_usage * 1e+2)
-end
+    stdscr.addstr("%-20s  " % ("Memory usage"), curses.color_pair(3))
+    p_value(stdscr, "%.0f %s", mem_used_kb*1024.0, size_unit, 5)
+    stdscr.addstr(" / ", curses.color_pair(1))
+    p_value(stdscr, "%.0f %s", mem_total_kb*1024.0, size_unit, 2)
+    stdscr.addstr(" ( ", curses.color_pair(1))
+    p_rangecolor(stdscr, "%.0f%%" % (usage*100.0), usage, 0.5, 0.8)
+    stdscr.addstr(" )\n", curses.color_pair(1))
 
-local function fsusage(w, mount)
-    local pat = "%s+(%d+)"
-    local f = system(string.format("df -P \"%s\"", mount))
-    local lines = walk(f:lines())
-    f:close()
-    if not lines[2] then
-        return
-    end
-    local pat = "^[^%s]+%s+(%d+)%s+(%d+)%s+(%d+)"
-    local total, used, available = string.match(lines[2], pat)
-    if not (total and used and available) then
-        return
-    end
-    local usage = used / total
-    if usage < 0.9 then
-        usage = string.format("%.1f%%", usage * 1e+2)
-    else
-        usage = string.format("%.1f%% !", usage * 1e+2)
-    end
-    w:printf("%-20s  %s / %s (%s)", string.format("Usage of %s:", mount), format_iec("%.2f %s", used * 1024.0),
-        format_iec("%.2f %s", total * 1024.0), usage)
-end
+    stdscr.addstr("%-20s  " % ("Memory dirty"), curses.color_pair(3))
+    p_value(stdscr, "%.0f %s", dirty_kb*1024.0, size_unit, 5)
+    stdscr.addstr(" + ", curses.color_pair(1))
+    p_value(stdscr, "%.0f %s", writeback_kb*1024.0, size_unit, 5)
+    stdscr.addstr(" ( ", curses.color_pair(1))
+    p_rangecolor(stdscr, "%.0f%%" %
+                 (dirty_ratio * 100.0), dirty_ratio, 0.05, 0.2)
+    stdscr.addstr(" )\n", curses.color_pair(1))
 
-local function uptime(w, now)
-    local pat = "^btime%s+(%d+)"
-    local f = read("/proc/stat")
-    local btime
-    for line in f:lines() do
-        local m = string.match(line, pat)
-        if m then
-            btime = tonumber(m)
-            break
-        end
-    end
-    f:close()
-    if not btime then
-        return
-    end
-    local uptime = now - btime
-    local days = math.floor(uptime / (24 * 60 * 60))
-    uptime = uptime % (24 * 60 * 60)
-    local hours = math.floor(uptime / (60 * 60))
-    uptime = uptime % (60 * 60)
-    local minutes = math.floor(uptime / 60)
-    uptime = uptime % 60
-    local seconds = uptime
-    w:printf("%-20s  %d days, %02d:%02d:%02d", "Uptime:", days, hours, minutes, seconds)
-end
+    if swap_total_kb > 0:
+        stdscr.addstr("%-20s  " % ("Swap usage"), curses.color_pair(3))
+        p_value(stdscr, "%.0f %s", swap_used_kb*1024.0, size_unit, 5)
+        stdscr.addstr(" / ", curses.color_pair(1))
+        p_value(stdscr, "%.0f %s", swap_total_kb*1024.0, size_unit, 2)
+        stdscr.addstr(" ( ", curses.color_pair(1))
+        p_rangecolor(stdscr, "%.0f%%" %
+                     (swap_usage * 100.0), swap_usage, 0.5, 0.8)
+        stdscr.addstr(" )\n", curses.color_pair(1))
 
-local function motd()
-    local now = os.time()
+    stdscr.addstr("%-20s  " % ("Commit charge"), curses.color_pair(3))
+    p_value(stdscr, "%.0f %s", commit_kb*1024.0, size_unit, 5)
+    stdscr.addstr(" < ", curses.color_pair(1))
+    p_value(stdscr, "%.0f %s", commit_limit_kb*1024.0, size_unit, 2)
+    stdscr.addstr(" ( ", curses.color_pair(1))
+    p_rangecolor(stdscr, "%.0f%%" %
+                 (commit_charge * 100.0), commit_charge, 1.0, 1.5)
+    stdscr.addstr(", ", curses.color_pair(1))
+    p_rangecolor(stdscr, "%.0f%%" %
+                 (commit_usage * 100.0), commit_usage, 0.5, 0.8)
+    stdscr.addstr(" )\n", curses.color_pair(1))
 
-    print()
-    printf("System information as of %s", os.date("%Y-%m-%dT%T%z", now))
-    print()
 
-    local w = new_writer()
-    w:setprefix("  ")
-    pcall(loadavg, w)
-    pcall(meminfo, w)
-    pcall(fsusage, w, "/")
-    pcall(fsusage, w, "/home")
-    pcall(uptime, w, now)
-    pcall(temp, w)
-    for _, line in ipairs(w) do
-        print(line)
-    end
+def s_meminfo():
+    meminfo = get_meminfo()
+    mem_total_kb = meminfo["MemTotal"]
+    mem_available_kb = meminfo["MemAvailable"]
+    swap_total_kb = meminfo["SwapTotal"]
+    swap_free_kb = meminfo["SwapFree"]
+    commit_limit_kb = meminfo["CommitLimit"]
+    commit_kb = meminfo["Committed_AS"]
+    dirty_kb = meminfo["Dirty"]
+    writeback_kb = meminfo["Writeback"]
 
-    print()
-end
+    mem_used_kb = mem_total_kb - mem_available_kb
+    swap_used_kb = swap_total_kb - swap_free_kb
+    usage = mem_used_kb / mem_total_kb
+    dirty_ratio = (dirty_kb+writeback_kb) / mem_available_kb
+    if swap_total_kb > 0:
+        swap_usage = swap_used_kb / swap_total_kb
+    else:
+        swap_usage = 0.0
+    commit_charge = commit_kb / mem_total_kb
+    commit_usage = commit_kb / commit_limit_kb
 
-motd()
+    lines = []
+    lines.append(
+        "%-20s  %s / %s (%.0f%%)" % (
+            "Memory usage:",
+            s_value("%.0f %s", mem_used_kb*1024.0, size_unit),
+            s_value("%.0f %s", mem_total_kb*1024.0, size_unit),
+            usage*1e+2
+        ))
+
+    lines.append(
+        "%-20s  %s + %s (%.0f%%)" % (
+            "Memory dirty:",
+            s_value("%.0f %s", dirty_kb*1024.0, size_unit),
+            s_value("%.0f %s", writeback_kb*1024.0, size_unit),
+            dirty_ratio*1e+2
+        ))
+
+    if swap_total_kb > 0:
+        lines.append(
+            "%-20s  %s / %s (%.0f%%)" % (
+                "Swap usage:",
+                s_value("%.0f %s", swap_used_kb*1024.0, size_unit),
+                s_value("%.0f %s", swap_total_kb*1024.0, size_unit),
+                swap_usage*1e+2
+            ))
+
+    lines.append(
+        "%-20s  %s < %s (%.0f%%, %.0f%%)" % (
+            "Commit charge:",
+            s_value("%.0f %s", commit_kb*1024.0, size_unit),
+            s_value("%.0f %s", commit_limit_kb*1024.0, size_unit),
+            commit_charge*1e+2,
+            commit_usage*1e+2
+        ))
+    return lines
+
+
+def p_temp(stdscr):
+    try:
+        temp = int(read_node("/sys/class/thermal/thermal_zone0/temp")) / 1000.0
+        stdscr.addstr("%-20s  " % ("Temperature"), curses.color_pair(3))
+        stdscr.addstr("%.1f C\n" % (temp), curses.color_pair(1))
+    except:
+        pass
+
+
+def s_temp():
+    try:
+        temp = int(read_node("/sys/class/thermal/thermal_zone0/temp")) / 1000.0
+        temp_str = "%-20s  %.1f C" % ("Temperature:", temp)
+        if temp >= 60.0:
+            temp_str = temp_str + " (!)"
+        return [temp_str]
+    except:
+        pass
+    return []
+
+
+def s_fsusage(path):
+    vfs = os.statvfs(path)
+    unavail = vfs.f_blocks - vfs.f_bavail
+
+    usage = unavail / vfs.f_blocks
+    usage_str = "%-20s  %s / %s (%.1f%%%s)" % (
+        "Usage of %s:" % path,
+        s_value("%.2f %s", unavail * vfs.f_bsize, size_unit),
+        s_value("%.2f %s", vfs.f_blocks * vfs.f_bsize, size_unit),
+        usage*1e+2,
+        " !" if usage >= 0.9 else ""
+    )
+    return [usage_str]
+
+
+pat_stat = re.compile(
+    "^cpu\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)")
+
+pat_net = re.compile(
+    "^\\s*(.+):\\s+(\\d+)\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\d+\\s+\\d+\\s+(\\d+)")
+
+pat_block = re.compile(
+    "\\s*\\d+\\s+\\d+\\s+(\\d+)\\s+\\d+\\s+\\d+\\s+\\d+\\s+(\\d+)\\s+\\d+\\s+\\d+\\s+(\\d+)")
+
+
+class Stat:
+    def __init__(self):
+        self.net = {}
+        self.block = {}
+        self.stat_busy, self.stat_idle = 0, 0
+        self.cpufreq = {}
+
+    def sample(self):
+        self.get_stat()
+        self.get_cpufreq()
+        self.get_net()
+        self.get_block("mmcblk0")
+        self.get_block("sda")
+        self.get_block("sdb")
+        self.get_block("sdc")
+
+    def delta(self, other):
+        self.stat_busy = other.stat_busy - self.stat_busy
+        self.stat_idle = other.stat_idle - self.stat_idle
+        for dev, v0 in self.block.items():
+            v1 = other.block[dev]
+            v0[0] = v1[0] - v0[0]
+            v0[1] = v1[1] - v0[1]
+            v0[2] = v1[2] - v0[2]
+        for dev, v0 in self.net.items():
+            v1 = other.net[dev]
+            v0[0] = v1[0] - v0[0]
+            v0[1] = v1[1] - v0[1]
+        for freq, v0 in self.cpufreq.items():
+            self.cpufreq[freq] = other.cpufreq[freq]-self.cpufreq[freq]
+
+    def get_stat(self):
+        with open('/proc/stat') as f:
+            for line in f:
+                m = pat_stat.match(line)
+                if m is None:
+                    continue
+                self.stat_busy = int(m.group(1))+int(m.group(2))+int(m.group(3))+int(
+                    m.group(6)) + int(m.group(7))+int(m.group(8)) + int(m.group(9))+int(m.group(10))
+                self.stat_idle = int(m.group(4))+int(m.group(5))
+                break
+
+    def get_cpufreq(self):
+        with open('/sys/devices/system/cpu/cpufreq/policy0/stats/time_in_state') as f:
+            for line in f:
+                fields = line.split()
+                self.cpufreq[int(fields[0])] = int(fields[1])
+
+    def get_net(self):
+        with open('/proc/net/dev') as f:
+            for line in f:
+                m = pat_net.match(line)
+                if m is None:
+                    continue
+                if m.group(1) == "lo":
+                    continue
+                dev = m.group(1)
+                rx_kb = int(m.group(2))
+                tx_kb = int(m.group(3))
+                self.net[dev] = [rx_kb, tx_kb]
+
+    def get_block(self, dev):
+        if not os.path.isfile("/sys/block/%s/stat" % dev):
+            return
+        n = 512
+        with open("/sys/block/%s/stat" % dev) as f:
+            for line in f:
+                m = pat_block.match(line)
+                if m is None:
+                    continue
+                r_kb = int(m.group(1))*n
+                w_kb = int(m.group(2))*n
+                t = int(m.group(3))
+                self.block[dev] = [r_kb, w_kb, t]
+
+
+size_unit = ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB")
+speed_unit = ("B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s",
+              "PiB/s", "EiB/s", "ZiB/s", "YiB/s")
+
+
+def make_unit(x, units):
+    # return x, units[0]
+    if x > 1:
+        n = (int(math.log2(x))-3)//10
+    else:
+        n = 0
+    if n < 0:
+        n = 0
+    max = len(units)-1
+    if n > max:
+        n = max
+    return x/math.pow(2.0, n*10.0), units[n]
+
+
+def p_stat(stdscr):
+    global stat
+    s = Stat()
+    s.sample()
+    stat.delta(s)
+    for dev, data in s.net.items():
+        if data[0] < 65536 and data[1] < 65536:
+            continue
+        d = stat.net[dev]
+        stdscr.addstr("%-20s  " % ("Net %s" % dev), curses.color_pair(3))
+        stdscr.addstr("%-5s " % ("Rx"), curses.color_pair(1))
+        p_value(stdscr, "%6.0f %-5s ", data[0], size_unit, 5)
+        stdscr.addstr("%-5s " % ("Tx"), curses.color_pair(1))
+        p_value(stdscr, "%6.0f %-5s\n", data[1], size_unit, 5)
+        stdscr.addstr("%-20s  " % (""), curses.color_pair(3))
+        stdscr.addstr("%-5s " % ("Rx"), curses.color_pair(1))
+        p_value(stdscr, "%6.0f %-5s ", d[0]/args.interval, speed_unit, 5)
+        stdscr.addstr("%-5s " % ("Tx"), curses.color_pair(1))
+        p_value(stdscr, "%6.0f %-5s\n", d[1]/args.interval, speed_unit, 5)
+    for dev, data in s.block.items():
+        if data[0] < 65536 and data[1] < 65536 and data[2] < 10*clock_tick:
+            continue
+        d = stat.block[dev]
+        stdscr.addstr("%-20s  " % ("Block %s" % dev), curses.color_pair(3))
+        t = (d[2] * 1e-3 / args.interval)
+        stdscr.addstr("%-5s " % ("Read"), curses.color_pair(1))
+        p_value(stdscr, "%6.0f %-5s ", data[0], size_unit, 5)
+        stdscr.addstr("%-5s " % ("Write"), curses.color_pair(1))
+        p_value(stdscr, "%6.0f %-5s ", data[1], size_unit, 5)
+        stdscr.addstr("%-5s " % ("Time"), curses.color_pair(1))
+        p_rangecolor(stdscr, "%6.1f %s\n" % (t*1e+2, "%"), t, 0.25, 0.75)
+        stdscr.addstr("%-20s  " % (""), curses.color_pair(3))
+        stdscr.addstr("%-5s " % ("Read"), curses.color_pair(1))
+        p_value(stdscr, "%6.0f %-5s ", d[0]/args.interval, speed_unit, 5)
+        stdscr.addstr("%-5s " % ("Write"), curses.color_pair(1))
+        p_value(stdscr, "%6.0f %-5s\n", d[1]/args.interval, speed_unit, 5)
+    stdscr.addstr("%-20s  " % ("CPU stats"), curses.color_pair(3))
+    stat_total = stat.stat_busy+stat.stat_idle
+    t = stat.stat_busy/stat_total
+    freq_max, time_sum = 0, 0
+    for freq, time in stat.cpufreq.items():
+        freq_max = freq if freq > freq_max else freq_max
+        time_sum = time_sum+time
+    f = 0.0
+    for freq, time in stat.cpufreq.items():
+        f = f+((freq / freq_max) * (time / time_sum))
+    u = t*f
+    stdscr.addstr("%-5s " % ("Time"), curses.color_pair(1))
+    p_rangecolor(stdscr, "%6.1f %-5s " % (t*100.0, "%"), t, 0.25, 0.75)
+    stdscr.addstr("%-5s " % ("Freq"), curses.color_pair(1))
+    stdscr.addstr("%6.1f %-5s " % (f*100.0, "%"), curses.color_pair(5))
+    stdscr.addstr("%-5s " % ("Usage"), curses.color_pair(1))
+    p_rangecolor(stdscr, "%6.1f %s\n" % (u*100.0, "%"), u, 0.25, 0.75)
+    stdscr.addstr("%-20s  " % (""), curses.color_pair(3))
+    freq_max, time_sum = 0, 0
+    for freq, time in s.cpufreq.items():
+        freq_max = freq if freq > freq_max else freq_max
+        time_sum = time_sum+time
+    f = 0.0
+    for freq, time in s.cpufreq.items():
+        f = f+((freq / freq_max) * (time / time_sum))
+    t = s.stat_busy / clock_tick
+    cputime = str(timedelta(seconds=math.floor(t)))
+    usagetime = str(timedelta(seconds=math.floor(t*f)))
+    stdscr.addstr("%-5s " % ("Time"), curses.color_pair(1))
+    stdscr.addstr("%-12s " % (cputime), curses.color_pair(5))
+    stdscr.addstr("%-5s " % ("Usage"), curses.color_pair(1))
+    stdscr.addstr("%-12s\n" % (usagetime), curses.color_pair(5))
+    stat = s
+
+
+def render_loop(stdscr):
+    curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLACK)
+    curses.init_pair(2, curses.COLOR_CYAN, curses.COLOR_BLACK)
+    curses.init_pair(3, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
+    curses.init_pair(4, curses.COLOR_GREEN, curses.COLOR_BLACK)
+    curses.init_pair(5, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+    curses.init_pair(6, curses.COLOR_RED, curses.COLOR_BLACK)
+
+    while True:
+        stdscr.clear()
+        p_interval(stdscr)
+        p_time(stdscr)
+        stdscr.addstr("\n")
+        p_loadavg(stdscr)
+        p_meminfo(stdscr)
+        p_temp(stdscr)
+        stdscr.addstr("\n")
+        p_stat(stdscr)
+        stdscr.refresh()
+        time.sleep(args.interval)
+
+
+def watch_main():
+    print("%s = %d" % ("SC_CLK_TCK", clock_tick))
+    global stat
+    stat = Stat()
+    try:
+        stat.sample()
+        time.sleep(args.interval)
+        curses.wrapper(render_loop)
+    except InterruptedError:
+        pass
+    except KeyboardInterrupt:
+        pass
+
+
+def main():
+    now = datetime.now().astimezone()
+    lines = []
+    if is_motd:
+        lines.append("")
+        lines.append("System information as of %s" %
+                     now.isoformat(timespec="seconds"))
+        lines.append("")
+    lines.extend(s_loadavg())
+    lines.extend(s_meminfo())
+    lines.extend(s_fsusage("/"))
+    lines.extend(s_uptime(now))
+    lines.extend(s_temp())
+    for line in lines:
+        if is_motd:
+            print("  " + line)
+        else:
+            print(line)
+
+
+if __name__ == "__main__":
+    global clock_tick
+    clock_tick = os.sysconf("SC_CLK_TCK")
+
+    parser = argparse.ArgumentParser("piinfo")
+    parser.add_argument("-l", "--login", help="motd mode",
+                        action='store_true')
+    parser.add_argument("-w", "--watch", help="watch mode",
+                        action='store_true')
+    parser.add_argument("-i", "--interval",
+                        help="watch interval in seconds", type=int, default=5)
+    global args
+    args = parser.parse_args()
+    global is_motd
+    is_motd = args.login or ("motd" in sys.argv[0])
+
+    if args.watch:
+        import curses
+        watch_main()
+    else:
+        main()

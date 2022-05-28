@@ -1,16 +1,39 @@
 #!/bin/sh
 
-log() {
-    if [ "$SYSLOG" = "1" ]; then
+if [ ! -t 0 ] && command -v logger >/dev/null 2>&1; then
+    log() {
         logger -t "keepd" "$*"
-    else
-        echo "$(date -Is) $*" >&2
-    fi
+    }
+else
+    log() {
+        echo "$(date -Is) keepd[$$]: $*"
+    }
+fi
+
+invoke_command() {
+    "$@" </dev/null >/dev/null 2>&1 &
+    PID="$!"
+    log "started \"$*\" in \"$PWD\", pid ${PID}"
+    wait "${PID}"
+    STATUS="$?"
+    log "${PID} exited with ${STATUS}"
+    unset PID
+    unset STATUS
 }
 
+clean_exit() {
+    if [ -n "${PID}" ]; then
+        log "killing ${PID}"
+        kill "${PID}"
+        unset PID
+    fi
+    exit 0
+}
+
+trap "" HUP
+trap "clean_exit || true" EXIT INT QUIT TERM
+
 while true; do
-    log "start \"$*\""
-    "$@" </dev/null >/dev/null 2>&1
-    log "\"$*\" exited with $?, waiting 10s to restart"
-    sleep 10s
+    invoke_command "$@"
+    sleep 10
 done

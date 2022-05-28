@@ -1,13 +1,15 @@
 #!/bin/sh
 
-if [ ! -t 0 ] && command -v logger >/dev/null 2>&1; then
-    log() {
+log() {
+    if [ "$USE_SYSLOG" = 1 ]; then
         logger -t "keepd" "$*"
-    }
-else
-    log() {
+    else
         echo "$(date -Is) keepd[$$]: $*"
-    }
+    fi
+}
+
+if [ ! -t 0 ]; then
+    USE_SYSLOG=1
 fi
 
 invoke_command() {
@@ -30,7 +32,7 @@ clean_exit() {
     exit 0
 }
 
-trap "" HUP
+trap "USE_SYSLOG=1" HUP
 trap "clean_exit || true" EXIT INT QUIT TERM
 
 while true; do

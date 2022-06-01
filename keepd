@@ -2,7 +2,7 @@
 
 log() {
     if [ "$USE_SYSLOG" = 1 ]; then
-        logger -t "keepd" "$*"
+        logger -t "keepd[$$]" "$*"
     else
         echo "$(date -Is) keepd[$$]: $*"
     fi

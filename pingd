@@ -11,11 +11,17 @@ class InterruptedException(Exception):
     pass
 
 
+daemon_mode = False
+
+
 def on_signal(signum, frame) -> None:
-    logging.info("Got signal %d, exiting..." % signum)
+    if daemon_mode and signum == signal.SIGHUP:
+        return
+    logging.critical("Got signal %d, exiting..." % signum)
     raise InterruptedException()
 
 
+signal.signal(signal.SIGHUP, on_signal)
 signal.signal(signal.SIGINT, on_signal)
 signal.signal(signal.SIGTERM, on_signal)
 
@@ -63,17 +69,17 @@ def update_stats(force=False):
     sent = stat_data.sent
     received = len(stat_data.rtt_list)
     if sent > 0:
-        logging.info("PING %d packets transmitted, %d received, %.1f%% packet loss",
-                     sent, received, (sent-received)*1e+2/sent)
+        logging.critical("PING %d packets transmitted, %d received, %.1f%% packet loss",
+                         sent, received, (sent-received)*1e+2/sent)
     if received > 0:
         a = np.array(stat_data.rtt_list)
-        logging.info("RTT min=%.3fms avg=%.3fms 90%%=%.3fms 99%%=%.3fms max=%.3fms mdev=%.3fms",
-                     np.min(a)*1e+3,
-                     np.mean(a)*1e+3,
-                     np.percentile(a, 90)*1e+3,
-                     np.percentile(a, 99)*1e+3,
-                     np.max(a)*1e+3,
-                     np.std(a)*1e+3)
+        logging.critical("RTT min=%.3fms avg=%.3fms 90%%=%.3fms 99%%=%.3fms max=%.3fms mdev=%.3fms",
+                         np.min(a)*1e+3,
+                         np.mean(a)*1e+3,
+                         np.percentile(a, 90)*1e+3,
+                         np.percentile(a, 99)*1e+3,
+                         np.max(a)*1e+3,
+                         np.std(a)*1e+3)
     stat_data = Statistics()
 
 
@@ -116,7 +122,7 @@ def create_socket(args):
     try:
         family, address = resolve(args.host, family)
     except Exception as err:
-        logging.error("resolve %s: %s", args.host, err)
+        logging.warning("resolve %s: %s", args.host, err)
         return None, None, args.host
     if family == socket.AF_INET:
         sock = icmplib.ICMPv4Socket(privileged=is_root())
@@ -129,7 +135,22 @@ def create_socket(args):
     return sock, address, host_str
 
 
+def daemon():
+    pid = os.fork()
+    if pid > 0:
+        sys.exit(0)
+    elif pid < 0:
+        sys.exit(-1)
+    sys.stdin = open(os.devnull, 'r')
+    sys.stdout = open(os.devnull, 'w')
+    sys.stderr = open(os.devnull, 'w')
+    global daemon_mode
+    daemon_mode = True
+
+
 def main(args):
+    if args.daemon:
+        daemon()
     sock, address, host_str = None, None, None
     last_host_str = None
     sequence = 0
@@ -180,17 +201,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "-l", "--log", help="log filename", type=str)
     parser.add_argument(
-        "-v", "--verbose", help="write verbose log to file", action='store_true')
+        "-q", "--quiet", help="only write statistics to log", action='store_true')
+    parser.add_argument(
+        "-d", "--daemon", help="daemonize", action='store_true')
     parser.add_argument("host", help="host to ping", type=str)
     args = parser.parse_args()
 
     if args.log is None:
-        # debug mode
+        # console mode
         log_stream = sys.stdout
         log_level = logging.DEBUG
     else:
         log_stream = open(args.log, "w")
-        log_level = logging.DEBUG if args.verbose else logging.INFO
+        log_level = logging.CRITICAL if args.quiet else logging.INFO
 
     logging.basicConfig(
         stream=log_stream,

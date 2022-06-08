@@ -5,6 +5,7 @@ import os
 import signal
 import sys
 import logging
+import syslog
 
 
 class InterruptedException(Exception):
@@ -14,10 +15,24 @@ class InterruptedException(Exception):
 daemon_mode = False
 
 
+def slog(msg):
+    logging.critical("%s", msg)
+
+
+def init_syslog(host):
+    import syslog
+    syslog.openlog("pingd", syslog.LOG_PID)
+    global slog
+
+    def slog(msg):
+        logging.critical("%s", msg)
+        syslog.syslog(syslog.LOG_INFO, "%s: %s" % (host, msg))
+
+
 def on_signal(signum, frame) -> None:
     if daemon_mode and signum == signal.SIGHUP:
         return
-    logging.critical("Got signal %d, exiting..." % signum)
+    slog("Got signal %d, exiting..." % signum)
     raise InterruptedException()
 
 
@@ -30,6 +45,7 @@ class Statistics:
     def __init__(self):
         self.rtt_list = []
         self.sent = 0
+        self.error = 0
         self.last = time.monotonic()
 
 
@@ -67,35 +83,25 @@ def update_stats(force=False):
         if now - stat_data.last < args.stats:
             return
     sent = stat_data.sent
+    error = stat_data.error
     received = len(stat_data.rtt_list)
     if sent > 0:
-        logging.critical("PING %d packets transmitted, %d received, %.1f%% packet loss",
-                         sent, received, (sent-received)*1e+2/sent)
+        slog("PING %d packets transmitted, %d received, %d error, %.1f%% packet loss" %
+             (sent, received, error, (sent-received)*1e+2/sent))
     if received > 0:
         a = np.array(stat_data.rtt_list)
-        logging.critical("RTT min=%.3fms avg=%.3fms 90%%=%.3fms 99%%=%.3fms max=%.3fms mdev=%.3fms",
-                         np.min(a)*1e+3,
-                         np.mean(a)*1e+3,
-                         np.percentile(a, 90)*1e+3,
-                         np.percentile(a, 99)*1e+3,
-                         np.max(a)*1e+3,
-                         np.std(a)*1e+3)
+        slog("RTT min=%.3fms avg=%.3fms 90%%=%.3fms 99%%=%.3fms max=%.3fms mdev=%.3fms" %
+             (np.min(a)*1e+3,
+              np.mean(a)*1e+3,
+              np.percentile(a, 90)*1e+3,
+              np.percentile(a, 99)*1e+3,
+              np.max(a)*1e+3,
+              np.std(a)*1e+3))
     stat_data = Statistics()
 
 
 def is_root():
     return os.geteuid() == 0
-
-
-def try_ping(host_str, sock, sequence, address, size, timeout):
-    try:
-        ping(sock, sequence, address, size, timeout)
-    except icmplib.ICMPError as err:
-        logging.debug("PING %s: %s", host_str, err)
-    except icmplib.TimeoutExceeded:
-        logging.debug("PING %s: icmp_seq=%s timeout",
-                      host_str, sequence)
-    update_stats()
 
 
 def create_socket(args):
@@ -149,8 +155,6 @@ def daemon():
 
 
 def main(args):
-    if args.daemon:
-        daemon()
     sock, address, host_str = None, None, None
     last_host_str = None
     sequence = 0
@@ -168,13 +172,15 @@ def main(args):
             if sock is not None:
                 try:
                     ping(sock, sequence, address, args.size, args.timeout)
-                except icmplib.ICMPError as err:
-                    logging.debug("PING %s: %s", host_str, err)
                 except icmplib.TimeoutExceeded:
                     logging.debug("PING %s: icmp_seq=%s timeout",
                                   host_str, sequence)
+                except icmplib.ICMPError as err:
+                    logging.debug("PING %s: %s", host_str, err)
+                    stat_data.error = stat_data.error + 1
                 except icmplib.ICMPSocketError as err:
                     logging.error("socket error: %s", err)
+                    stat_data.error = stat_data.error + 1
                     sock = None
                 update_stats()
             time.sleep(args.interval)
@@ -197,23 +203,28 @@ if __name__ == "__main__":
     parser.add_argument(
         "-s", "--size", help="payload size", type=int, default=56)
     parser.add_argument(
-        "-n", "--stats", help="stats time span in seconds", type=int, default=7200)
+        "-n", "--stats", help="stats time span in seconds", type=int, default=3600)
     parser.add_argument(
         "-l", "--log", help="log filename", type=str)
     parser.add_argument(
-        "-q", "--quiet", help="only write statistics to log", action='store_true')
+        "-q", "--quiet", help="omit errors when logging", action='store_true')
+    parser.add_argument(
+        "-S", "--syslog", help="write statistics to syslog", action='store_true')
     parser.add_argument(
         "-d", "--daemon", help="daemonize", action='store_true')
     parser.add_argument("host", help="host to ping", type=str)
     args = parser.parse_args()
 
-    if args.log is None:
-        # console mode
-        log_stream = sys.stdout
-        log_level = logging.DEBUG
-    else:
+    log_stream = sys.stdout
+    log_level = logging.DEBUG
+    if args.syslog:
+        init_syslog(args.host)
+        log_stream = os.devnull
+    if args.log is not None:
         log_stream = open(args.log, "w")
-        log_level = logging.CRITICAL if args.quiet else logging.INFO
+        log_level = logging.INFO
+    if args.quiet:
+        log_level = logging.CRITICAL
 
     logging.basicConfig(
         stream=log_stream,
@@ -222,6 +233,8 @@ if __name__ == "__main__":
         datefmt="%FT%T%z"
     )
 
+    if args.daemon:
+        daemon()
     try:
         import socket
         import time

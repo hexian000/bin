@@ -38,7 +38,7 @@ maintenance_apt() {
     run apt install -f -y
     run apt dist-upgrade -y
     run apt autoremove -y
-    run apt autoclean
+    run apt clean
     dpkg -l | grep ^rc | awk '{print $2}' |
         while read packagename; do
             run dpkg --purge "$packagename"

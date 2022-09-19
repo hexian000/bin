@@ -2,26 +2,31 @@
 
 if [ "$(whoami)" != "root" ]; then
     if [ -n "$(which sudo)" ]; then
-		echo "\$ sudo $0 $*"
-		sudo $0 $*
-	else
-		echo "\$ su -c "$0 $*" root"
-		su -c "$0 $*" root
-	fi
+        echo "\$ sudo $0 $*"
+        sudo $0 $*
+    else
+        echo "\$ su -c "$0 $*" root"
+        su -c "$0 $*" root
+    fi
     exit $?
 fi
 
-SWAPS="$(tail -n +2 /proc/swaps | awk '{print $1}')"
+SWAPS="$(tail -n +2 /proc/swaps)"
 
 [ -z "$SWAPS" ] && exit 0
 
+IFS="
+"
+
 for SWAP in $SWAPS; do
-    echo "- $SWAP"
-    swapoff "$SWAP"
+    FILENAME=$(echo "$SWAP" | awk '{print $1}')
+    echo "- $FILENAME"
+    swapoff "$FILENAME"
 done
 
 for SWAP in $SWAPS; do
-    echo "+ $SWAP"
-    swapon "$SWAP"
+    FILENAME=$(echo "$SWAP" | awk '{print $1}')
+    PRIORITY=$(echo "$SWAP" | awk '{print $5}')
+    echo "+ $FILENAME"
+    swapon -p $PRIORITY "$FILENAME"
 done
-

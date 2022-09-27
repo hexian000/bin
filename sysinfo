@@ -41,6 +41,15 @@ local function parse_list(lines, pat, index)
     return matches
 end
 
+local function parse_netdev(f)
+    f:read("*l")
+    f:read("*l")
+    local netdev = parse_list(f:lines(),
+                              "^%s*(.+):%s+(%d+)%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+(%d+)",
+                              1)
+    return netdev
+end
+
 local function read_node(path)
     local f = read(path)
     local line = f:read("*l")
@@ -64,14 +73,21 @@ local function read_meminfo()
     return meminfo
 end
 
-local function read_stat()
-    local f = read("/proc/stat")
+local function read_stat(path)
+    local f = read(path)
     local stat = parse(f:lines(), {
         cpu = "^cpu%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)",
         btime = "^btime%s+(%d+)"
     })
     f:close()
     return stat
+end
+
+local function read_temp()
+    local ok, temp = pcall(read_node,
+                           "/sys/devices/virtual/thermal/thermal_zone0/temp")
+    if not ok then return nil end
+    return temp
 end
 
 local function read_df(...)
@@ -186,15 +202,14 @@ local function format_temp(w, temp)
     local celsius = temp * 1e-3
     w:printf("%-20s  %.01f C", "Temperature:", celsius)
 end
-
 local function print_motd()
     local sysinfo = {
         now = os.time(),
         loadavg = read_node("/proc/loadavg"),
-        temp = read_node("/sys/devices/virtual/thermal/thermal_zone0/temp"),
-        df = read_df("/", "/home"),
-        stat = read_stat(),
-        meminfo = read_meminfo()
+        df = read_df("/", "/home", "/tmp"),
+        temp = read_temp(),
+        stat = read_stat("/proc/stat"),
+        meminfo = read_meminfo("/proc/meminfo")
     }
 
     print()
@@ -206,7 +221,7 @@ local function print_motd()
     format_meminfo(w, sysinfo.meminfo)
     format_df(w, sysinfo.df, "/", "/home")
     format_uptime(w, sysinfo.stat, sysinfo.now)
-    format_temp(w, sysinfo.temp)
+    if sysinfo.temp then format_temp(w, sysinfo.temp) end
 
     for _, line in ipairs(w) do print("  " .. line) end
     print()

@@ -1,0 +1,80 @@
+#!/usr/bin/env lua
+
+local function read(path)
+    return assert(io.open(path, "r"), "can't open file: " .. path)
+end
+
+local function read_node(path)
+    local f = read(path)
+    local line = f:read("*l")
+    f:close()
+    return line
+end
+
+local iec_units = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"}
+local function format_iec(format, x)
+    local n, max
+    if x > 1 then
+        n = math.floor((math.floor(math.log(x) / math.log(2)) - 3) / 10)
+    else
+        n = 0
+    end
+    if n < 0 then n = 0 end
+    max = #iec_units - 1
+    if n > max then n = max end
+    return string.format(format, x / math.pow(2.0, n * 10.0), iec_units[n + 1])
+end
+
+local function dump_dev(dev)
+    local node = string.format("/sys/block/%s", dev)
+    local disksize = tonumber(read_node(node .. "/disksize"))
+    if disksize < 1 then return end
+    local comp_algorithm = (function()
+        local s = read_node(node .. "/comp_algorithm")
+        local m = string.match(s, "%[(.*)%]")
+        if m then return m end
+        return s
+    end)()
+    local f = read(node .. "/mm_stat")
+    local orig_data_size = f:read("*n")
+    local compr_data_size = f:read("*n")
+    local mem_used_total = f:read("*n")
+    local mem_limit = f:read("*n")
+    local mem_used_max = f:read("*n")
+    local same_pages = f:read("*n")
+    local pages_compacted = f:read("*n")
+    local huge_pages = f:read("*n")
+    f:close()
+    local kv_fmt = "%-20s  %s"
+    local iec_fmt = "%.0f %s"
+    local function printkv(k, fmt, ...)
+        print(string.format("%-20s  " .. fmt, k, ...))
+    end
+
+    printkv("device", "%s", node)
+    printkv("disksize", "%s", format_iec(iec_fmt, disksize))
+    printkv("comp_algorithm", "%s", comp_algorithm)
+    printkv("mem_limit", "%s (%.1f%% of disksize)",
+            format_iec(iec_fmt, mem_limit), mem_limit / disksize * 100.0)
+    printkv("mem_used_max", "%s (%.1f%% of disksize)",
+            format_iec(iec_fmt, mem_used_max), mem_used_max / disksize * 100.0)
+    printkv("orig_data_size", "%s (%.1f%% of disksize)",
+            format_iec(iec_fmt, orig_data_size),
+            orig_data_size / disksize * 100.0)
+    printkv("compr_data_size", "%s (%.1f%% of orig_data_size)",
+            format_iec(iec_fmt, compr_data_size),
+            compr_data_size / orig_data_size * 100.0)
+    printkv("mem_used_total", "%s (%.1f%% of orig_data_size)",
+            format_iec(iec_fmt, mem_used_total),
+            mem_used_total / orig_data_size * 100.0)
+    local PAGESIZE = 4096
+    printkv("same_pages", "%s (%s in 4 KiB pages)", same_pages,
+            format_iec(iec_fmt, same_pages * PAGESIZE))
+    printkv("pages_compacted", "%s (%s in 4 KiB pages)", pages_compacted,
+            format_iec(iec_fmt, pages_compacted * PAGESIZE))
+    printkv("huge_pages", "%s (%s in 4 KiB pages)", huge_pages,
+            format_iec(iec_fmt, huge_pages * PAGESIZE))
+    print()
+end
+
+for i = 0, 9 do pcall(dump_dev, "zram" .. i) end

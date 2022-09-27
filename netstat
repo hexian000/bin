@@ -1,0 +1,121 @@
+#!/usr/bin/env lua
+
+local function printf(...) print(string.format(...)) end
+
+local function read(path)
+    return assert(io.open(path, "r"), "can't open file: " .. path)
+end
+
+local function system(command)
+    return assert(io.popen(command, "r"), "can't execute command: " .. command)
+end
+
+local function parse(lines, pats)
+    local matches = {}
+    for line in lines do
+        for key, pat in pairs(pats) do
+            local m = {string.match(line, pat)}
+            if #m > 0 then matches[key] = m end
+        end
+    end
+    return matches
+end
+
+local function parse_list(lines, pat, index)
+    local matches = {}
+    for line in lines do
+        local m = {string.match(line, pat)}
+        if #m >= index then matches[m[index]] = m end
+    end
+    return matches
+end
+
+local function read_stat(path)
+    local f = read(path)
+    local stat = parse(f:lines(), {
+        cpu = "^cpu%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)%s+(%d+)",
+        btime = "^btime%s+(%d+)"
+    })
+    f:close()
+    return stat
+end
+
+local function parse_netdev(f)
+    f:read("*l")
+    f:read("*l")
+    local netdev = parse_list(f:lines(),
+                              "^%s*(.+):%s+(%d+)%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+(%d+)",
+                              1)
+    return netdev
+end
+
+local iec_units = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"}
+local function format_iec(format, x)
+    local n, max
+    if x > 1 then
+        n = math.floor((math.floor(math.log(x) / math.log(2)) - 3) / 10)
+    else
+        n = 0
+    end
+    if n < 0 then n = 0 end
+    max = #iec_units - 1
+    if n > max then n = max end
+    return string.format(format, x / math.pow(2.0, n * 10.0), iec_units[n + 1])
+end
+
+local function print_netdev(v0, v1)
+    local t = {}
+    for dev in pairs(v1) do
+        local m0, m1 = v0[dev], v1[dev]
+        if m0 and m1 then
+            local title = string.format("%s:", dev)
+            local rx = (tonumber(m1[2]) - tonumber(m0[2]))
+            local tx = (tonumber(m1[3]) - tonumber(m0[3]))
+            if rx ~= 0 or tx ~= 0 then
+                table.insert(t, {
+                    dev, string.format("%-16s  Tx    %12s, Rx    %12s", title,
+                                       format_iec("%.0f %s", tx),
+                                       format_iec("%.0f %s", rx))
+                })
+            end
+        end
+    end
+    table.sort(t, function(a, b) return a[1] < b[1] end)
+    for _, kv in ipairs(t) do print("  " .. kv[2]) end
+end
+
+function bwusage(p0, p1)
+    local t0, t1, v0, v1, f
+    local f0 = read(p0)
+    f = system("stat -c %X " .. p0)
+    t0 = tonumber(f:read("*l"))
+    f:close()
+    v0 = parse_netdev(f0)
+    f0:close()
+    local f1 = read(p1)
+    f = system("stat -c %X " .. p1)
+    t1 = tonumber(f:read("*l"))
+    f:close()
+    v1 = parse_netdev(f1)
+    f1:close()
+    printf("From %s to %s:", os.date("%Y-%m-%dT%T%z", t0),
+           os.date("%Y-%m-%dT%T%z", t1))
+    print_netdev(v0, v1)
+    print()
+end
+
+local function main()
+    local d = tonumber(arg[1]) or 0
+    if d == 0 then
+        bwusage("/tmp/netstat/net-dev", "/proc/net/dev")
+    elseif d == 1 then
+        bwusage("/tmp/netstat/net-dev.1", "/tmp/netstat/net-dev")
+    else
+        bwusage("/tmp/netstat/net-dev." .. d, "/tmp/netstat/net-dev." .. (d - 1))
+    end
+end
+local ok, err = pcall(main)
+if not ok then
+    print(err)
+    os.exit(1)
+end

@@ -298,8 +298,8 @@ local function format_df(w, df, ...)
             end
             w:printf("%-20s  %s / %s (%s)",
                      string.format("Usage of %s:", mount),
-                     format_iec("%.2f %s", used * 1024.0),
-                     format_iec("%.2f %s", total * 1024.0), usage)
+                     format_iec("%.2f %s", used),
+                     format_iec("%.2f %s", total), usage)
         end
     end
 end

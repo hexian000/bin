@@ -391,7 +391,7 @@ local function render(current, previous)
     if dt > 0 then
         format_cpustat(w, current.stat.cpu, previous.stat.cpu, dt)
         format_netdev(w, current.netdev, previous.netdev, dt, "eth0", "wlan0")
-        format_block(w, current.block, previous.block, dt, "mmcblk0", "sda", "vda")
+        format_block(w, current.block, previous.block, dt, "mmcblk0", "nvme0n1", "sda", "vda")
     end
 
     for _, line in ipairs(w) do

@@ -1,6 +1,12 @@
 #!/usr/bin/env lua
 
-local function printf(...) print(string.format(...)) end
+if not table.unpack then
+    table.unpack = unpack
+end
+
+local function printf(...)
+    print(string.format(...))
+end
 
 local writer_mt = {
     __index = function(t, k)
@@ -26,7 +32,9 @@ local function parse(lines, pats)
     for line in lines do
         for key, pat in pairs(pats) do
             local m = {string.match(line, pat)}
-            if #m > 0 then matches[key] = m end
+            if #m > 0 then
+                matches[key] = m
+            end
         end
     end
     return matches
@@ -36,7 +44,9 @@ local function parse_list(lines, pat, index)
     local matches = {}
     for line in lines do
         local m = {string.match(line, pat)}
-        if #m >= index then matches[m[index]] = m end
+        if #m >= index then
+            matches[m[index]] = m
+        end
     end
     return matches
 end
@@ -44,9 +54,7 @@ end
 local function parse_netdev(f)
     f:read("*l")
     f:read("*l")
-    local netdev = parse_list(f:lines(),
-                              "^%s*(.+):%s+(%d+)%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+(%d+)",
-                              1)
+    local netdev = parse_list(f:lines(), "^%s*(.+):%s+(%d+)%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+%d+%s+(%d+)", 1)
     return netdev
 end
 
@@ -84,9 +92,10 @@ local function read_stat(path)
 end
 
 local function read_temp()
-    local ok, temp = pcall(read_node,
-                           "/sys/devices/virtual/thermal/thermal_zone0/temp")
-    if not ok then return nil end
+    local ok, temp = pcall(read_node, "/sys/devices/virtual/thermal/thermal_zone0/temp")
+    if not ok then
+        return nil
+    end
     return temp
 end
 
@@ -97,9 +106,7 @@ local function read_df(...)
     end
     local f = system(cmd)
     f:read("*l")
-    local df = parse_list(f:lines(),
-                          "^[^%s]+%s+(%d+)%s+(%d+)%s+(%d+)%s+[^%s]+%s+([^%s]+)",
-                          4)
+    local df = parse_list(f:lines(), "^[^%s]+%s+(%d+)%s+(%d+)%s+(%d+)%s+[^%s]+%s+([^%s]+)", 4)
     f:close()
     return df
 end
@@ -112,16 +119,22 @@ local function format_iec(format, x)
     else
         n = 0
     end
-    if n < 0 then n = 0 end
+    if n < 0 then
+        n = 0
+    end
     max = #iec_units - 1
-    if n > max then n = max end
+    if n > max then
+        n = max
+    end
     return string.format(format, x / math.pow(2.0, n * 10.0), iec_units[n + 1])
 end
 
 local function format_loadavg(w, loadavg)
     local function walk(iter)
         local t = {}
-        for v in iter do table.insert(t, v) end
+        for v in iter do
+            table.insert(t, v)
+        end
         return t
     end
     local s = string.match(loadavg, "^[%d.]+%s+[%d.]+%s+[%d.]+")
@@ -143,24 +156,22 @@ local function format_meminfo(w, meminfo)
     local usage = mem_used / mem_total
     local dirty_ratio = (dirty + writeback) / mem_available
     local swap_usage
-    if swap_total > 0 then swap_usage = swap_used / swap_total end
+    if swap_total > 0 then
+        swap_usage = swap_used / swap_total
+    end
     local commit_charge = commit / mem_total
     local commit_usage = commit / commit_limit
 
-    w:printf("%-20s  %s / %s (%.0f%%)", "Memory usage:",
-             format_iec("%.0f %s", mem_used), format_iec("%.0f %s", mem_total),
-             usage * 1e+2)
-    w:printf("%-20s  %s + %s (%.0f%%)", "Memory dirty:",
-             format_iec("%.0f %s", dirty), format_iec("%.0f %s", writeback),
-             dirty_ratio * 1e+2)
+    w:printf("%-20s  %s / %s (%.0f%%)", "Memory usage:", format_iec("%.0f %s", mem_used),
+        format_iec("%.0f %s", mem_total), usage * 1e+2)
+    w:printf("%-20s  %s + %s (%.0f%%)", "Memory dirty:", format_iec("%.0f %s", dirty), format_iec("%.0f %s", writeback),
+        dirty_ratio * 1e+2)
     if swap_usage then
-        w:printf("%-20s  %s / %s (%.0f%%)", "Swap usage:",
-                 format_iec("%.0f %s", swap_used),
-                 format_iec("%.0f %s", swap_total), swap_usage * 1e+2)
+        w:printf("%-20s  %s / %s (%.0f%%)", "Swap usage:", format_iec("%.0f %s", swap_used),
+            format_iec("%.0f %s", swap_total), swap_usage * 1e+2)
     end
-    w:printf("%-20s  %s < %s (%.0f%%, %.0f%%)", "Commit charge:",
-             format_iec("%.0f %s", commit), format_iec("%.0f %s", commit_limit),
-             commit_charge * 1e+2, commit_usage * 1e+2)
+    w:printf("%-20s  %s < %s (%.0f%%, %.0f%%)", "Commit charge:", format_iec("%.0f %s", commit),
+        format_iec("%.0f %s", commit_limit), commit_charge * 1e+2, commit_usage * 1e+2)
 end
 
 local function format_df(w, df, ...)
@@ -176,10 +187,8 @@ local function format_df(w, df, ...)
             else
                 usage = string.format("%.1f%% !", usage * 1e+2)
             end
-            w:printf("%-20s  %s / %s (%s)",
-                     string.format("Usage of %s:", mount),
-                     format_iec("%.2f %s", used), format_iec("%.2f %s", total),
-                     usage)
+            w:printf("%-20s  %s / %s (%s)", string.format("Usage of %s:", mount), format_iec("%.2f %s", used),
+                format_iec("%.2f %s", total), usage)
         end
     end
 end
@@ -194,8 +203,7 @@ local function format_uptime(w, stat, now)
     local minutes = math.floor(uptime / 60)
     uptime = uptime % 60
     local seconds = uptime
-    w:printf("%-20s  %d days, %02d:%02d:%02d", "Uptime:", days, hours, minutes,
-             seconds)
+    w:printf("%-20s  %d days, %02d:%02d:%02d", "Uptime:", days, hours, minutes, seconds)
 end
 
 local function format_temp(w, temp)

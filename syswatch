@@ -203,8 +203,7 @@ local function format_temp(w, temp)
     w:printf("%-20s  %.01f C", "Temperature:", celsius)
 end
 local function read_cpufreq()
-    local f =
-        read("/sys/devices/system/cpu/cpufreq/policy0/stats/time_in_state")
+    local f = read("/sys/devices/system/cpu/cpufreq/policy0/stats/time_in_state")
     local cpufreq = parse_list(f:lines(), "^(%d+)%s+(%d+)", 1)
     f:close()
     return cpufreq
@@ -213,13 +212,9 @@ end
 local function read_block(...)
     local block = {}
     for _, dev in ipairs({...}) do
-        local ok, line = pcall(read_node,
-                               string.format("/sys/block/%s/stat", dev))
+        local ok, line = pcall(read_node, string.format("/sys/block/%s/stat", dev))
         if ok then
-            block[dev] = {
-                string.match(line,
-                             "^%s*%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+(%d+)")
-            }
+            block[dev] = {string.match(line, "^%s*%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+(%d+)")}
         end
     end
     return block
@@ -241,7 +236,9 @@ end
 local function format_loadavg(w, loadavg)
     local function walk(iter)
         local t = {}
-        for v in iter do table.insert(t, v) end
+        for v in iter do
+            table.insert(t, v)
+        end
         return t
     end
     local s = table.concat(walk(string.gmatch(loadavg, "[%d.]+")), " ", 1, 3)
@@ -263,24 +260,22 @@ local function format_meminfo(w, meminfo)
     local usage = mem_used / mem_total
     local dirty_ratio = (dirty + writeback) / mem_available
     local swap_usage
-    if swap_total > 0 then swap_usage = swap_used / swap_total end
+    if swap_total > 0 then
+        swap_usage = swap_used / swap_total
+    end
     local commit_charge = commit / mem_total
     local commit_usage = commit / commit_limit
 
-    w:printf("%-20s  %s / %s (%.0f%%)", "Memory usage:",
-             format_iec("%.0f %s", mem_used), format_iec("%.0f %s", mem_total),
-             usage * 1e+2)
-    w:printf("%-20s  %s + %s (%.0f%%)", "Memory dirty:",
-             format_iec("%.0f %s", dirty), format_iec("%.0f %s", writeback),
-             dirty_ratio * 1e+2)
+    w:printf("%-20s  %s / %s (%.0f%%)", "Memory usage:", format_iec("%.0f %s", mem_used),
+        format_iec("%.0f %s", mem_total), usage * 1e+2)
+    w:printf("%-20s  %s + %s (%.0f%%)", "Memory dirty:", format_iec("%.0f %s", dirty), format_iec("%.0f %s", writeback),
+        dirty_ratio * 1e+2)
     if swap_usage then
-        w:printf("%-20s  %s / %s (%.0f%%)", "Swap usage:",
-                 format_iec("%.0f %s", swap_used),
-                 format_iec("%.0f %s", swap_total), swap_usage * 1e+2)
+        w:printf("%-20s  %s / %s (%.0f%%)", "Swap usage:", format_iec("%.0f %s", swap_used),
+            format_iec("%.0f %s", swap_total), swap_usage * 1e+2)
     end
-    w:printf("%-20s  %s < %s (%.0f%%, %.0f%%)", "Commit charge:",
-             format_iec("%.0f %s", commit), format_iec("%.0f %s", commit_limit),
-             commit_charge * 1e+2, commit_usage * 1e+2)
+    w:printf("%-20s  %s < %s (%.0f%%, %.0f%%)", "Commit charge:", format_iec("%.0f %s", commit),
+        format_iec("%.0f %s", commit_limit), commit_charge * 1e+2, commit_usage * 1e+2)
 end
 
 local function format_df(w, df, ...)
@@ -296,10 +291,8 @@ local function format_df(w, df, ...)
             else
                 usage = string.format("%.1f%% !", usage * 1e+2)
             end
-            w:printf("%-20s  %s / %s (%s)",
-                     string.format("Usage of %s:", mount),
-                     format_iec("%.2f %s", used),
-                     format_iec("%.2f %s", total), usage)
+            w:printf("%-20s  %s / %s (%s)", string.format("Usage of %s:", mount), format_iec("%.2f %s", used),
+                format_iec("%.2f %s", total), usage)
         end
     end
 end
@@ -314,8 +307,7 @@ local function format_uptime(w, stat, now)
     local minutes = math.floor(uptime / 60)
     uptime = uptime % 60
     local seconds = uptime
-    w:printf("%-20s  %d days, %02d:%02d:%02d", "Uptime:", days, hours, minutes,
-             seconds)
+    w:printf("%-20s  %d days, %02d:%02d:%02d", "Uptime:", days, hours, minutes, seconds)
 end
 
 local function format_netdev(w, current, previous, timediff, ...)
@@ -325,8 +317,7 @@ local function format_netdev(w, current, previous, timediff, ...)
             local title = string.format("Net %s:", dev)
             local rx = (tonumber(m1[2]) - tonumber(m0[2])) / timediff
             local tx = (tonumber(m1[3]) - tonumber(m0[3])) / timediff
-            w:printf("%-20s  Rx    %12s, Tx    %12s", title,
-                     format_iec("%.0f %s/s", rx), format_iec("%.0f %s/s", tx))
+            w:printf("%-20s  Rx    %12s, Tx    %12s", title, format_iec("%.0f %s/s", rx), format_iec("%.0f %s/s", tx))
         end
     end
 end
@@ -338,20 +329,24 @@ local function format_block(w, current, previous, timediff, ...)
         if m0 and m1 then
             local title = string.format("Block %s:", dev)
             local read = (tonumber(m1[1]) - tonumber(m0[1])) * sector / timediff
-            local write = (tonumber(m1[2]) - tonumber(m0[2])) * sector /
-                              timediff
-            local time = (tonumber(m1[3]) - tonumber(m0[3])) /
-                             (timediff * clock_tick)
-            w:printf("%-20s  Read  %12s, Write %12s, Time  %12s", title,
-                     format_iec("%.0f %s/s", read),
-                     format_iec("%.0f %s/s", write),
-                     string.format("%.1f %%", time * 1e+2))
+            local write = (tonumber(m1[2]) - tonumber(m0[2])) * sector / timediff
+            local time = (tonumber(m1[3]) - tonumber(m0[3])) / (timediff * clock_tick)
+            w:printf("%-20s  Read  %12s, Write %12s, Time  %12s", title, format_iec("%.0f %s/s", read),
+                format_iec("%.0f %s/s", write), string.format("%.1f %%", time * 1e+2))
         end
     end
 end
 
-local function format_cpufreq(w, current, previous, timediff)
-    -- todo
+local function format_cpustat(w, current, previous, timediff)
+    local d = {}
+    for i in ipairs(current) do
+        table.insert(d, current[i] - previous[i])
+    end
+    local user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice = unpack(d)
+    local title = "CPU Total:"
+    local total = clock_tick * timediff
+    local busy = (total - idle) / total
+    w:printf("%-20s  Time  %12s", title, string.format("%.0f %%", busy * 100.0))
 end
 
 local function sample()
@@ -368,12 +363,13 @@ local function sample()
 end
 
 local function render(current, previous)
-    os.execute("clear")
     print()
     printf("System information as of %s", os.date("%Y-%m-%dT%T%z", now))
     print()
 
-    local w = setmetatable({prefix = "  "}, writer_mt)
+    local w = setmetatable({
+        prefix = "  "
+    }, writer_mt)
     format_loadavg(w, current.loadavg)
     format_meminfo(w, current.meminfo)
     format_df(w, current.df, "/", "/home")
@@ -381,12 +377,13 @@ local function render(current, previous)
     if current.temp then
         format_temp(w, current.temp)
     end
-    format_netdev(w, current.netdev, previous.netdev,
-                  current.now - previous.now, "eth0", "wlan0")
-    format_block(w, current.block, previous.block, current.now - previous.now,
-                 "mmcblk0", "sda", "vda")
+    format_cpustat(w, current.stat.cpu, previous.stat.cpu, current.now - previous.now)
+    format_netdev(w, current.netdev, previous.netdev, current.now - previous.now, "eth0", "wlan0")
+    format_block(w, current.block, previous.block, current.now - previous.now, "mmcblk0", "sda", "vda")
 
-    for _, line in ipairs(w) do print(line) end
+    for _, line in ipairs(w) do
+        print(line)
+    end
     print()
 end
 

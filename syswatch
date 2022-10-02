@@ -340,7 +340,7 @@ local function format_block(w, current, previous, dt, ...)
             local title = string.format("Block %s:", dev)
             local read = (tonumber(m1[1]) - tonumber(m0[1])) * sector / dt
             local write = (tonumber(m1[2]) - tonumber(m0[2])) * sector / dt
-            local wait = tonumber(m1[3]) - tonumber(m0[3]) / dt
+            local wait = (tonumber(m1[3]) - tonumber(m0[3])) / dt
             w:printf("%-20s  Read  %12s, Write %12s, Wait  %12s", title, format_iec("%.0f %s/s", read),
                 format_iec("%.0f %s/s", write), string.format("%.0f ms", wait))
         end

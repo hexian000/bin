@@ -368,7 +368,7 @@ local function sample()
         stat = read_stat("/proc/stat"),
         meminfo = read_meminfo("/proc/meminfo"),
         netdev = parse_netdev(read("/proc/net/dev")),
-        block = read_block("mmcblk0", "sda", "vda")
+        block = read_block("mmcblk0", "nvme0n1", "sda", "vda")
     }
 end
 

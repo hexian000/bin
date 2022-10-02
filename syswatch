@@ -214,7 +214,8 @@ local function read_block(...)
     for _, dev in ipairs({...}) do
         local ok, line = pcall(read_node, string.format("/sys/block/%s/stat", dev))
         if ok then
-            block[dev] = {string.match(line, "^%s*%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+(%d+)")}
+            block[dev] =
+                {string.match(line, "^%s*%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+%d+%s+(%d+)%s+%d+%s+%d+%s+%d+%s+(%d+)")}
         end
     end
     return block
@@ -226,6 +227,7 @@ clock_tick = (function()
     f:close()
     return v
 end)()
+print("CLK_TCK = " .. clock_tick)
 
 local function sleep(seconds)
     local f = system(string.format("sleep %d", seconds))
@@ -310,41 +312,41 @@ local function format_uptime(w, stat, now)
     w:printf("%-20s  %d days, %02d:%02d:%02d", "Uptime:", days, hours, minutes, seconds)
 end
 
-local function format_netdev(w, current, previous, timediff, ...)
+local function format_netdev(w, current, previous, dt, ...)
     for _, dev in ipairs({...}) do
         local m0, m1 = previous[dev], current[dev]
         if m0 and m1 then
             local title = string.format("Net %s:", dev)
-            local rx = (tonumber(m1[2]) - tonumber(m0[2])) / timediff
-            local tx = (tonumber(m1[3]) - tonumber(m0[3])) / timediff
+            local rx = (tonumber(m1[2]) - tonumber(m0[2])) / dt
+            local tx = (tonumber(m1[3]) - tonumber(m0[3])) / dt
             w:printf("%-20s  Rx    %12s, Tx    %12s", title, format_iec("%.0f %s/s", rx), format_iec("%.0f %s/s", tx))
         end
     end
 end
 
-local function format_block(w, current, previous, timediff, ...)
+local function format_block(w, current, previous, dt, ...)
     local sector = 512
     for _, dev in ipairs({...}) do
         local m0, m1 = previous[dev], current[dev]
         if m0 and m1 then
             local title = string.format("Block %s:", dev)
-            local read = (tonumber(m1[1]) - tonumber(m0[1])) * sector / timediff
-            local write = (tonumber(m1[2]) - tonumber(m0[2])) * sector / timediff
-            local time = (tonumber(m1[3]) - tonumber(m0[3])) / (timediff * clock_tick)
-            w:printf("%-20s  Read  %12s, Write %12s, Time  %12s", title, format_iec("%.0f %s/s", read),
-                format_iec("%.0f %s/s", write), string.format("%.1f %%", time * 1e+2))
+            local read = (tonumber(m1[1]) - tonumber(m0[1])) * sector / dt
+            local write = (tonumber(m1[2]) - tonumber(m0[2])) * sector / dt
+            local wait = tonumber(m1[3]) - tonumber(m0[3])
+            w:printf("%-20s  Read  %12s, Write %12s, Wait  %12s", title, format_iec("%.0f %s/s", read),
+                format_iec("%.0f %s/s", write), string.format("%.0f ms", wait))
         end
     end
 end
 
-local function format_cpustat(w, current, previous, timediff)
+local function format_cpustat(w, current, previous, dt)
     local d = {}
     for i in ipairs(current) do
         table.insert(d, current[i] - previous[i])
     end
     local user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice = unpack(d)
+    local total = user + nice + system + idle + iowait + irq + softirq + steal + guest + guest_nice
     local title = "CPU Total:"
-    local total = clock_tick * timediff
     local busy = (total - idle) / total
     w:printf("%-20s  Time  %12s", title, string.format("%.0f %%", busy * 100.0))
 end
@@ -377,9 +379,12 @@ local function render(current, previous)
     if current.temp then
         format_temp(w, current.temp)
     end
-    format_cpustat(w, current.stat.cpu, previous.stat.cpu, current.now - previous.now)
-    format_netdev(w, current.netdev, previous.netdev, current.now - previous.now, "eth0", "wlan0")
-    format_block(w, current.block, previous.block, current.now - previous.now, "mmcblk0", "sda", "vda")
+    local dt = current.now - previous.now
+    if dt > 0 then
+        format_cpustat(w, current.stat.cpu, previous.stat.cpu, dt)
+        format_netdev(w, current.netdev, previous.netdev, dt, "eth0", "wlan0")
+        format_block(w, current.block, previous.block, dt, "mmcblk0", "sda", "vda")
+    end
 
     for _, line in ipairs(w) do
         print(line)

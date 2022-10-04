@@ -229,14 +229,6 @@ local function read_block(...)
     return block
 end
 
-clock_tick = (function()
-    local f = system("getconf CLK_TCK")
-    local v = tonumber(f:read())
-    f:close()
-    return v
-end)()
-print("CLK_TCK = " .. clock_tick)
-
 local function sleep(seconds)
     local f = system(string.format("sleep %d", seconds))
     f:read("*all")

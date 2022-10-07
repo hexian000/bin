@@ -91,8 +91,27 @@ local function read_stat(path)
     return stat
 end
 
+local function try_nodes(list)
+    for _, node in ipairs(list) do
+        local ok, value = pcall(read_node, node)
+        if ok then
+            return node, value
+        end
+    end
+    return nil, nil
+end
+
+local function init_temp()
+    local value
+    temp_node, value = try_nodes({"/sys/devices/platform/coretemp.0/hwmon/hwmon2/temp1_input",
+                                  "/sys/devices/virtual/thermal/thermal_zone0/temp"})
+end
+
 local function read_temp()
-    local ok, temp = pcall(read_node, "/sys/devices/virtual/thermal/thermal_zone0/temp")
+    if not temp_node then
+        return nil
+    end
+    local ok, temp = pcall(read_node, temp_node)
     if not ok then
         return nil
     end
@@ -348,7 +367,11 @@ local function format_cpustat(w, current, previous, dt)
     local total = user + nice + system + idle + iowait + irq + softirq + steal + guest + guest_nice
     local title = "CPU Total:"
     local busy = (total - idle) / total
-    w:printf("%-20s  Time  %12s", title, string.format("%.0f %%", busy * 100.0))
+    w:printf("%-20s  Time  %12s", title, string.format("%.01f %%", busy * 100.0))
+end
+
+local function init()
+    init_temp()
 end
 
 local function sample()
@@ -392,7 +415,8 @@ local function render(current, previous)
     print()
 end
 
-local function main()
+function main()
+    init()
     local current, previous
     current = sample()
     repeat

@@ -1,15 +1,16 @@
-#!/bin/sh -e
+#!/bin/sh
+set -e
 
 umask 222
-mkdir -p /tmp/netstat
-cd /tmp/netstat
+mkdir -p /tmp/netdevstat
+cd /tmp/netdevstat
 
 rotate() {
-    local NAME="$1"
+    NAME="$1"
     if ! [ -f "${NAME}.new" ]; then
         return
     fi
-    local MAX=$(($2 - 1))
+    MAX=$(($2 - 1))
     for i in $(seq $MAX -1 1); do
         if [ -f "${NAME}.$i" ]; then
             mv "${NAME}.$i" "${NAME}.$(($i + 1))"
@@ -22,9 +23,9 @@ rotate() {
 }
 
 cat /proc/net/dev >net-dev.new
-rotate "net-dev" 10
+(rotate "net-dev" 10)
 
 # cat /proc/stat >stat.new
-# rotate "stat" 10
+# (rotate "stat" 10)
 
 exit 0

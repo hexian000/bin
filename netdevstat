@@ -107,11 +107,11 @@ end
 local function main()
     local d = tonumber(arg[1]) or 0
     if d == 0 then
-        bwusage("/tmp/netstat/net-dev", "/proc/net/dev")
+        bwusage("/tmp/netdevstat/net-dev", "/proc/net/dev")
     elseif d == 1 then
-        bwusage("/tmp/netstat/net-dev.1", "/tmp/netstat/net-dev")
+        bwusage("/tmp/netdevstat/net-dev.1", "/tmp/netdevstat/net-dev")
     else
-        bwusage("/tmp/netstat/net-dev." .. d, "/tmp/netstat/net-dev." .. (d - 1))
+        bwusage("/tmp/netdevstat/net-dev." .. d, "/tmp/netdevstat/net-dev." .. (d - 1))
     end
 end
 local ok, err = pcall(main)

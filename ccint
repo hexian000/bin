@@ -1,25 +1,16 @@
 #!/bin/sh
 
-start_path="$(pwd)"
-script="$1"
-if ! [ -f "${script}" ]; then
-    echo "\"${script}\" - file not found" >&2
+SCRIPT="$1"
+if ! [ -f "${SCRIPT}" ]; then
+    echo "\"${SCRIPT}\" - file not found" >&2
     exit 1
 fi
 shift
-base="$(basename "${script}" .cc)"
+BASENAME="$(basename "${SCRIPT}" .cc)"
+TEMPDIR="$(mktemp -d)"
 
-# prefer memory
-if [ -d "/dev/shm" ]; then
-    temp="$(mktemp -p /dev/shm -d)"
-elif [ -d "/run/shm" ]; then
-    temp="$(mktemp -p /run/shm -d)"
-else
-    temp="$(mktemp -d)"
-fi
-
-if [ ! -d "${temp}" ]; then
-    echo "failed to create \"${temp}\""
+if [ ! -d "${TEMPDIR}" ]; then
+    echo "failed to create \"${TEMPDIR}\""
     exit 1
 fi
 
@@ -40,12 +31,12 @@ if [ -z "${LDFLAGS}" ]; then
     LDFLAGS="-lm -lrt -lpthread -ldl"
 fi
 
-echo "+ ${CXX} ${CXXFLAGS} -o \"${temp}/${base}\" \"${script}\" ${LDFLAGS}"
-if ! ${CXX} ${CXXFLAGS} -o "${temp}/${base}" "${script}" ${LDFLAGS}; then
-    rm -r "${temp}"
+echo "+ ${CXX} ${CXXFLAGS} -o \"${TEMPDIR}/${BASENAME}\" \"${SCRIPT}\" ${LDFLAGS}"
+if ! ${CXX} ${CXXFLAGS} -o "${TEMPDIR}/${BASENAME}" "${SCRIPT}" ${LDFLAGS}; then
+    rm -r "${TEMPDIR}"
     exit 1
 fi
 
-(cd "${temp}" && "./${base}" "$@")
+(cd "${TEMPDIR}" && "./${BASENAME}" "$@")
 
-rm -r "${temp}"
+rm -r "${TEMPDIR}"

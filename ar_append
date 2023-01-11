@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+
+OUT="$1"
+shift
+
+TMPDIR="$(mktemp -d)"
+cleanup() {
+    rm -rf "$TMPDIR"
+}
+trap "cleanup" EXIT HUP INT QUIT TERM
+
+while [ "$1" != "" ]; do
+    echo "append $1"
+    ARCHIVE="$(realpath $1)"
+    (cd "$TMPDIR" && ar x "$ARCHIVE")
+    shift
+done
+
+echo "create $OUT"
+ar qc "$OUT" "$TMPDIR"/*
+
+echo "OK"

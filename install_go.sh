@@ -32,8 +32,12 @@ echo "+ Installed: ${GOVERSION}"
 if [ -z "${LATEST}" ]; then
     LATEST=$(curl -sL "${API}" |
         jq -r '[.[] | select(.stable)][0] | .version')
-    echo "+ Latest: ${LATEST}"
 fi
+if [ -z "${LATEST}" ]; then
+    echo "Failed to get latest version." >&2
+    exit 1
+fi
+echo "+ Latest: ${LATEST}"
 
 if [ "${GOVERSION}" = "${LATEST}" ]; then
     exit 0

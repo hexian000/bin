@@ -1,14 +1,31 @@
 #!/bin/sh
 set -e
 
-if [ -n "$1" ]; then
-    LATEST="go$1"
-fi
+while [ -n "$1" ]; do
+    case "$1" in
+    "-v")
+        VERSION="go$2"
+        shift
+        ;;
+    "--arch")
+        GOARCH="$2"
+        shift
+        ;;
+    "--force")
+        OVERWRITE=1
+        ;;
+    *)
+        echo "usage: $0 [-v 1.19.5] [--arch amd64] [--force]" >&2
+        exit 1
+        ;;
+    esac
+    shift
+done
 
 API="https://go.dev/dl/?mode=json"
 MIRROR="https://dl.google.com/go"
 
-get_goarch() {
+guess_arch() {
     case "$(arch)" in
     x86_64) echo "amd64" ;;
     x86) echo "386" ;;
@@ -17,10 +34,11 @@ get_goarch() {
     *) echo "$1" ;;
     esac
 }
-
-GOARCH="$(get_goarch)"
-echo "+ GOARCH=${GOARCH}"
+if [ -z "${GOARCH}" ]; then
+    GOARCH="$(guess_arch)"
+fi
 GOOS="linux"
+echo "+ GOARCH=${GOARCH}"
 echo "+ GOOS=${GOOS}"
 if command -v go >/dev/null 2>&1; then
     eval $(go env)
@@ -28,22 +46,22 @@ fi
 if [ -z "${GOVERSION}" ]; then
     GOVERSION="(none)"
 fi
-echo "+ Installed: ${GOVERSION}"
-if [ -z "${LATEST}" ]; then
-    LATEST=$(curl -sL "${API}" |
+echo "+ Local: ${GOVERSION}"
+if [ -z "${VERSION}" ] && command -v jq >/dev/null 2>&1; then
+    VERSION=$(curl -sL "${API}" |
         jq -r '[.[] | select(.stable)][0] | .version')
 fi
-if [ -z "${LATEST}" ]; then
-    echo "Failed to get latest version." >&2
+if [ -z "${VERSION}" ]; then
+    echo "Failed to get version." >&2
     exit 1
 fi
-echo "+ Latest: ${LATEST}"
+echo "+ Install: ${VERSION}"
 
-if [ "${GOVERSION}" = "${LATEST}" ]; then
+if [ "${OVERWRITE}" != 1 ] && [ "${GOVERSION}" = "${VERSION}" ]; then
     exit 0
 fi
 
-GOVERSION="${LATEST}"
+GOVERSION="${VERSION}"
 FILENAME="${GOVERSION}.${GOOS}-${GOARCH}.tar.gz"
 
 WORKDIR="${HOME}/.local"
@@ -51,11 +69,11 @@ mkdir -p "${WORKDIR}"
 
 if [ -d "${WORKDIR}/go" ]; then
     echo "Removing existing installation"
-    chmod -R a+w "${WORKDIR}/go"
+    chmod -R +w "${WORKDIR}/go"
     rm -rf "${WORKDIR}/go"
 fi
 echo "Installing ${GOVERSION}.${GOOS}-${GOARCH}"
-curl -sSL -- "${MIRROR}/${FILENAME}" | tar xzC "${WORKDIR}"
+curl -SL -- "${MIRROR}/${FILENAME}" | tar xzC "${WORKDIR}"
 chmod -R a-w "${WORKDIR}/go"
 
 echo '

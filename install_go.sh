@@ -1,8 +1,13 @@
 #!/bin/sh
 set -e
 
+CHANNEL=1
 while [ -n "$1" ]; do
     case "$1" in
+    "-c")
+        CHANNEL="$2"
+        shift
+        ;;
     "-v")
         VERSION="go$2"
         shift
@@ -15,7 +20,7 @@ while [ -n "$1" ]; do
         OVERWRITE=1
         ;;
     *)
-        echo "usage: $0 [-v 1.19.5] [--arch amd64] [--force]" >&2
+        echo "usage: $0 [-c 0] [-v 1.19.5] [--arch amd64] [--force]" >&2
         exit 1
         ;;
     esac
@@ -49,7 +54,7 @@ fi
 echo "+ Local: ${GOVERSION}"
 if [ -z "${VERSION}" ] && command -v jq >/dev/null 2>&1; then
     VERSION=$(curl -sL "${API}" |
-        jq -r '[.[] | select(.stable)][0] | .version')
+        jq -r "[.[] | select(.stable)][${CHANNEL}] | .version")
 fi
 if [ -z "${VERSION}" ]; then
     echo "Failed to get version." >&2

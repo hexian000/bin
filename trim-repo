@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+
+prune() {
+    (
+        cd "$1"
+        echo "$1:"
+        BEFORE="$(du -sh . | cut -f1)"
+        command -v git-lfs >/dev/null 2>&1 && git lfs prune --verbose
+        git reflog expire --expire=now --expire-unreachable=now --all
+        git prune --expire=now --verbose
+        AFTER="$(du -sh . | cut -f1)"
+        echo "    ${BEFORE} => ${AFTER}"
+    )
+}
+
+while [ -d "$1" ]; do
+    find "$1" -name ".git" | while read -r ITEM; do
+        prune "$(dirname "${ITEM}")"
+    done
+    shift
+done

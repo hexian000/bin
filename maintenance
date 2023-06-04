@@ -28,6 +28,7 @@ run() {
 }
 
 maintenance_apt() {
+    export DEBIAN_FRONTEND=noninteractive
     if [ -n "${dry_run}" ]; then
         run apt update
         run apt list --upgradable

@@ -8,7 +8,7 @@ while [ -n "$1" ]; do
         CHANNEL="$2"
         shift
         ;;
-    "-v")
+    "--version"|"-v")
         VERSION="go$2"
         shift
         ;;
@@ -16,11 +16,23 @@ while [ -n "$1" ]; do
         GOARCH="$2"
         shift
         ;;
-    "--force")
-        OVERWRITE=1
+    "--reinstall")
+        REINSTALL=1
+        ;;
+    "--channel"|"-c")
+        CHANNEL="$2"
+        shift
+        ;;
+    "--dry-run"|"-n")
+        DRYRUN=1
         ;;
     *)
-        echo "usage: $0 [-c 0] [-v 1.19.5] [--arch amd64] [--force]" >&2
+        echo "usage: $0 [-c 0] [-v 1.19.5] [--arch amd64] [--force] [--dry-run]" >&2
+        echo "    -v, --version <version>       manual specify version" >&2
+        echo "    --arch <arch>                 manual specify architecture" >&2
+        echo "    --reinstall                   reinstall even if versions are the same" >&2
+        echo "    -c, --channel                 0 for stable, 1 for old stable" >&2
+        echo "    -n, --dry-run                 check updates only" >&2
         exit 1
         ;;
     esac
@@ -62,7 +74,11 @@ if [ -z "${VERSION}" ]; then
 fi
 echo "+ Install: ${VERSION}"
 
-if [ "${OVERWRITE}" != 1 ] && [ "${GOVERSION}" = "${VERSION}" ]; then
+if [ "${DRYRUN}" = 1 ]; then
+    exit 0
+fi
+
+if [ "${REINSTALL}" != 1 ] && [ "${GOVERSION}" = "${VERSION}" ]; then
     exit 0
 fi
 

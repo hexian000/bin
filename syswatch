@@ -5,7 +5,24 @@ if not table.unpack then
 end
 
 local function printf(...)
-    print(string.format(...))
+    return print(string.format(...))
+end
+
+local function isfinite(x)
+    local infinity = math.huge
+    if x ~= x or x == infinity or x == -infinity then
+        return false
+    end
+    return true
+end
+
+local ldexp = math.ldexp or function(x, ep)
+    return x * math.pow(2, ep)
+end
+
+local function log(x, base)
+    local ln = math.log
+    return ln(x) / ln(base)
 end
 
 local writer_mt = {
@@ -131,21 +148,20 @@ local function read_df(...)
 end
 
 local iec_units = {"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "ZiB", "YiB"}
-local function format_iec(format, x)
-    local n, max
-    if x > 1 then
-        n = math.floor((math.floor(math.log(x) / math.log(2)) - 3) / 10)
-    else
-        n = 0
+function format_iec(value)
+    if not isfinite(value) or value < 8192.0 then
+        return string.format("%.0f %s", value, iec_units[1])
     end
-    if n < 0 then
-        n = 0
+    local x = math.floor((math.floor(log(value, 2)) - 3) / 10)
+    local i = math.min(x, #iec_units - 1)
+    local v = ldexp(value, i * -10)
+    if v < 10.0 then
+        return string.format("%.02f %s", v, iec_units[i + 1])
     end
-    max = #iec_units - 1
-    if n > max then
-        n = max
+    if v < 100.0 then
+        return string.format("%.01f %s", v, iec_units[i + 1])
     end
-    return string.format(format, x / math.pow(2.0, n * 10.0), iec_units[n + 1])
+    return string.format("%.0f %s", v, iec_units[i + 1])
 end
 
 local function format_loadavg(w, loadavg)
@@ -181,16 +197,14 @@ local function format_meminfo(w, meminfo)
     local commit_charge = commit / mem_total
     local commit_usage = commit / commit_limit
 
-    w:printf("%-20s  %s / %s (%.0f%%)", "Memory usage:", format_iec("%.0f %s", mem_used),
-        format_iec("%.0f %s", mem_total), usage * 1e+2)
-    w:printf("%-20s  %s + %s (%.0f%%)", "Memory dirty:", format_iec("%.0f %s", dirty), format_iec("%.0f %s", writeback),
-        dirty_ratio * 1e+2)
+    w:printf("%-20s  %s / %s (%.0f%%)", "Memory usage:", format_iec(mem_used), format_iec(mem_total), usage * 1e+2)
+    w:printf("%-20s  %s + %s (%.0f%%)", "Memory dirty:", format_iec(dirty), format_iec(writeback), dirty_ratio * 1e+2)
     if swap_usage then
-        w:printf("%-20s  %s / %s (%.0f%%)", "Swap usage:", format_iec("%.0f %s", swap_used),
-            format_iec("%.0f %s", swap_total), swap_usage * 1e+2)
+        w:printf("%-20s  %s / %s (%.0f%%)", "Swap usage:", format_iec(swap_used), format_iec(swap_total),
+            swap_usage * 1e+2)
     end
-    w:printf("%-20s  %s < %s (%.0f%%, %.0f%%)", "Commit charge:", format_iec("%.0f %s", commit),
-        format_iec("%.0f %s", commit_limit), commit_charge * 1e+2, commit_usage * 1e+2)
+    w:printf("%-20s  %s < %s (%.0f%%, %.0f%%)", "Commit charge:", format_iec(commit), format_iec(commit_limit),
+        commit_charge * 1e+2, commit_usage * 1e+2)
 end
 
 local function format_df(w, df, ...)
@@ -206,8 +220,8 @@ local function format_df(w, df, ...)
             else
                 usage = string.format("%.1f%% !", usage * 1e+2)
             end
-            w:printf("%-20s  %s / %s (%s)", string.format("Usage of %s:", mount), format_iec("%.2f %s", used),
-                format_iec("%.2f %s", total), usage)
+            w:printf("%-20s  %s / %s (%s)", string.format("Usage of %s:", mount), format_iec(used), format_iec(total),
+                usage)
         end
     end
 end

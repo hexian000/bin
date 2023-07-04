@@ -13,7 +13,7 @@ if [ ! -t 0 ]; then
 fi
 
 invoke_command() {
-    "$@" </dev/null >/dev/null 2>&1 &
+    "$@" &
     PID="$!"
     log "started \"$*\" in \"$PWD\", pid ${PID}"
     wait "${PID}"

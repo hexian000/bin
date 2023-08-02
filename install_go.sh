@@ -27,11 +27,11 @@ while [ -n "$1" ]; do
         DRYRUN=1
         ;;
     *)
-        echo "usage: $0 [-c 0] [-v 1.19.5] [--arch amd64] [--force] [--dry-run]" >&2
+        echo "usage: $0 [-c 0|-v 1.19.5] [--arch amd64] [--force] [--dry-run]" >&2
+        echo "    -c, --channel                 0 for current, 1 for previous" >&2
         echo "    -v, --version <version>       manual specify version" >&2
         echo "    --arch <arch>                 manual specify architecture" >&2
         echo "    --reinstall                   reinstall even if versions are the same" >&2
-        echo "    -c, --channel                 0 for stable, 1 for old stable" >&2
         echo "    -n, --dry-run                 check updates only" >&2
         exit 1
         ;;

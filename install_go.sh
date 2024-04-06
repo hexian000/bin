@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-CHANNEL=1
+CHANNEL=0
 while [ -n "$1" ]; do
     case "$1" in
     "-c")

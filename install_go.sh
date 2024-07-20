@@ -117,7 +117,7 @@ if [ -d "${HOME}/go" ]; then
     GOPATH="${HOME}/go"
     PATH="${PATH}:${GOPATH}/bin"
 fi
-export GOPROXY=https://proxy.golang.com.cn,direct
+export GOPROXY=https://goproxy.io,direct
 
 ----------
 '

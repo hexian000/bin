@@ -87,14 +87,14 @@ FILENAME="${GOVERSION}.${GOOS}-${GOARCH}.tar.gz"
 
 PREFIX="${HOME}/.local"
 mkdir -p "${PREFIX}"
-TMPDIR="$(mktemp -dp ${HOME}/.local)"
+TMPDIR="$(mktemp -dp "${PREFIX}")"
 trap "rm -rf \"${TMPDIR}\" || true" EXIT HUP INT QUIT TERM
 
 echo "Downloading ${GOVERSION}.${GOOS}-${GOARCH}"
 curl -SL -- "${MIRROR}/${FILENAME}" | tar xzC "${TMPDIR}"
 
 echo "Installing ${GOVERSION}.${GOOS}-${GOARCH}"
-if [ -d "${PREFIX}/go" ]; then
+if [ -e "${PREFIX}/go" ]; then
     chmod -R +w "${PREFIX}/go"
     mv "${PREFIX}/go" "${TMPDIR}/go.old"
     mv "${TMPDIR}/go" "${PREFIX}/go"
@@ -122,5 +122,5 @@ export GOPROXY=https://proxy.golang.com.cn,direct
 ----------
 '
 
-set -x
+echo "+ go version"
 "${PREFIX}/go/bin/go" version

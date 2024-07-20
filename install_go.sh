@@ -85,17 +85,23 @@ fi
 GOVERSION="${VERSION}"
 FILENAME="${GOVERSION}.${GOOS}-${GOARCH}.tar.gz"
 
-WORKDIR="${HOME}/.local"
-mkdir -p "${WORKDIR}"
+PREFIX="${HOME}/.local"
+mkdir -p "${PREFIX}"
+TMPDIR="$(mktemp -dp ${HOME}/.local)"
+trap "rm -rf \"${TMPDIR}\" || true" EXIT HUP INT QUIT TERM
 
-if [ -d "${WORKDIR}/go" ]; then
-    echo "Removing existing installation"
-    chmod -R +w "${WORKDIR}/go"
-    rm -rf "${WORKDIR}/go"
-fi
+echo "Downloading ${GOVERSION}.${GOOS}-${GOARCH}"
+curl -SL -- "${MIRROR}/${FILENAME}" | tar xzC "${TMPDIR}"
+
 echo "Installing ${GOVERSION}.${GOOS}-${GOARCH}"
-curl -SL -- "${MIRROR}/${FILENAME}" | tar xzC "${WORKDIR}"
-chmod -R a-w "${WORKDIR}/go"
+if [ -d "${PREFIX}/go" ]; then
+    chmod -R +w "${PREFIX}/go"
+    mv "${PREFIX}/go" "${TMPDIR}/go.old"
+    mv "${TMPDIR}/go" "${PREFIX}/go"
+else
+    mv "${TMPDIR}/go" "${PREFIX}/go"
+fi
+chmod -R a-w "${PREFIX}/go"
 
 echo '
 Add these lines to your user profile
@@ -117,4 +123,4 @@ export GOPROXY=https://proxy.golang.com.cn,direct
 '
 
 set -x
-"${WORKDIR}/go/bin/go" version
+"${PREFIX}/go/bin/go" version

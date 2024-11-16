@@ -29,7 +29,7 @@ run() {
 
 maintenance_apt() {
     export DEBIAN_FRONTEND=noninteractive
-    if [ -n "${CHECKUPDATE}" ]; then
+    if [ -n "${LIST_UPGRADABLE}" ]; then
         run apt update
         run apt list --upgradable
         return
@@ -47,7 +47,7 @@ maintenance_apt() {
 }
 
 maintenance_snap() {
-    if [ -n "${CHECKUPDATE}" ]; then
+    if [ -n "${LIST_UPGRADABLE}" ]; then
         return
     fi
 
@@ -60,7 +60,7 @@ maintenance_snap() {
 }
 
 maintenance_yum() {
-    if [ -n "${CHECKUPDATE}" ]; then
+    if [ -n "${LIST_UPGRADABLE}" ]; then
         return
     fi
 
@@ -68,7 +68,7 @@ maintenance_yum() {
 }
 
 maintenance_pacman() {
-    if [ -n "${CHECKUPDATE}" ]; then
+    if [ -n "${LIST_UPGRADABLE}" ]; then
         return
     fi
 
@@ -78,8 +78,8 @@ maintenance_pacman() {
 while [ $# -gt 0 ]; do
     case "$1" in
     "") ;;
-    "-c" | "--check-update")
-        CHECKUPDATE=1
+    "-l" | "--list-upgradable")
+        LIST_UPGRADABLE=1
         ;;
     *)
         echo "${RED}Unknown option: $1${RESET}"

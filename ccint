@@ -23,11 +23,11 @@ if [ -z "${CXX}" ]; then
 fi
 
 if [ -z "${CXXFLAGS}" ]; then
-    CXXFLAGS="-pipe -pedantic -Wall -Wextra -O3"
+    CXXFLAGS="-pipe -std=c++20 -pedantic -Wall -Wextra -O3"
 fi
 
 if [ -z "${LDFLAGS}" ]; then
-    # try link common libs
+    # link against glibc
     LDFLAGS="-lm -lrt -lpthread -ldl"
 fi
 

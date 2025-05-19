@@ -23,11 +23,11 @@ if [ -z "${CC}" ]; then
 fi
 
 if [ -z "${CFLAGS}" ]; then
-	CFLAGS="-pipe -pedantic -Wall -Wextra -Werror -O3"
+	CFLAGS="-pipe -std=c11 -pedantic -Wall -Wextra -Werror -O3"
 fi
 
 if [ -z "${LDFLAGS}" ]; then
-	# try link common libs
+	# link against glibc
 	LDFLAGS="-lm -lrt -lpthread -ldl"
 fi
 

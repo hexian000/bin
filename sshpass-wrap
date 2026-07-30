@@ -1,0 +1,199 @@
+#!/bin/sh
+# Multi-call sshpass wrapper. Install on PATH ahead of the real binaries under
+# the names ssh, scp and rsync (symlinks to this file); behavior is selected by
+# the invocation name (argv[0]). Run "sshpass-wrap --install [dir]" to create
+# those symlinks, busybox-style.
+#
+# If a host has an entry in ~/.ssh/passwd ("host:password"), authenticate with
+# that password via sshpass over forced password auth; otherwise fall through to
+# the real binary unchanged. The destination is resolved by ssh itself
+# ("ssh -G"), so no option table is maintained here. The mechanism engages only
+# for an OpenSSH client (the "-G" and forced-auth options are OpenSSH-specific);
+# against any other ssh (dropbear/busybox) the wrapper is a transparent
+# passthrough. scp delegates by pointing its transport at the ssh name
+# ("scp -S"); rsync delegates by pointing RSYNC_RSH at the ssh name.
+
+PASSWD_FILE="${HOME}/.ssh/passwd"
+PW_OPTS="-o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no"
+
+# Directory this wrapper is installed in, so the real binaries can be located
+# regardless of install location (and never re-exec the wrapper itself).
+case "$0" in
+    */*) WRAPPER_DIR="${0%/*}" ;;
+    *)
+        _p="$(command -v "$0" 2>/dev/null)"
+        case "${_p}" in
+            */*) WRAPPER_DIR="${_p%/*}" ;;
+            *)   WRAPPER_DIR="${HOME}/.local/bin" ;;
+        esac
+        ;;
+esac
+SSH_WRAPPER="${WRAPPER_DIR}/ssh"
+
+find_real() {
+    _name="$1"
+    _oldifs="${IFS}"
+    IFS=:
+    for _dir in ${PATH}; do
+        [ -n "${_dir}" ] || _dir="."
+        [ "${_dir}" = "${WRAPPER_DIR}" ] && continue
+        if [ -x "${_dir}/${_name}" ] && [ ! -d "${_dir}/${_name}" ]; then
+            IFS="${_oldifs}"
+            printf '%s\n' "${_dir}/${_name}"
+            return 0
+        fi
+    done
+    IFS="${_oldifs}"
+    return 1
+}
+
+is_openssh() {
+    "$1" -V 2>&1 | grep -q OpenSSH
+}
+
+lookup_passwd() {
+    while IFS= read -r _line || [ -n "${_line}" ]; do
+        case "${_line}" in
+        "$1:"*)
+            printf '%s\n' "${_line#*:}"
+            return 0
+            ;;
+        esac
+    done < "${PASSWD_FILE}"
+    return 1
+}
+
+check_perms() {
+    case "$(ls -ld "${PASSWD_FILE}" 2>/dev/null)" in
+    ????------*) ;;
+    *)
+        printf '%s: %s is accessible by group/other; run: chmod 600 %s\n' \
+            "$0" "${PASSWD_FILE}" "${PASSWD_FILE}" >&2
+        ;;
+    esac
+}
+
+# Absolute path to this script (for --install link targets).
+self_path() {
+    case "$0" in
+        /*)  printf '%s\n' "$0" ;;
+        */*) printf '%s\n' "$(CDPATH= cd "${0%/*}" 2>/dev/null && pwd)/${0##*/}" ;;
+        *)   command -v "$0" 2>/dev/null ;;
+    esac
+}
+
+# Create ssh/scp/rsync symlinks to this wrapper in the target directory.
+install_links() {
+    _src="$(self_path)"
+    if [ -z "${_src}" ] || [ ! -f "${_src}" ]; then
+        echo "sshpass-wrap: cannot resolve own path for --install" >&2
+        return 1
+    fi
+    _srcdir="${_src%/*}"
+    _target="${1:-${_srcdir}}"
+    if [ ! -d "${_target}" ]; then
+        echo "sshpass-wrap: not a directory: ${_target}" >&2
+        return 1
+    fi
+    # Relative link when installing beside this file (move-safe), else absolute.
+    if [ "${_target}" = "${_srcdir}" ]; then
+        _lt="${_src##*/}"
+    else
+        _lt="${_src}"
+    fi
+    _rc=0
+    for _t in ssh scp rsync; do
+        _dst="${_target}/${_t}"
+        if [ -e "${_dst}" ] && [ ! -L "${_dst}" ]; then
+            echo "sshpass-wrap: refusing to overwrite non-symlink ${_dst}" >&2
+            _rc=1
+            continue
+        fi
+        if [ -L "${_dst}" ] && [ "$(readlink "${_dst}" 2>/dev/null)" != "${_lt}" ]; then
+            echo "sshpass-wrap: refusing to overwrite existing symlink ${_dst}" >&2
+            _rc=1
+            continue
+        fi
+        if ln -sf "${_lt}" "${_dst}"; then
+            echo "linked ${_dst} -> ${_lt}"
+        else
+            echo "sshpass-wrap: failed to link ${_dst}" >&2
+            _rc=1
+        fi
+    done
+    return "${_rc}"
+}
+
+TOOL="${0##*/}"
+
+# Invoked by its own name (not through an ssh/scp/rsync symlink): the only
+# supported action is --install. "--install" is never intercepted when running
+# as ssh/scp/rsync, so it still reaches the real binary there.
+case "${TOOL}" in
+ssh|scp|rsync) ;;
+*)
+    case "$1" in
+    --install)
+        install_links "$2"
+        exit $?
+        ;;
+    *)
+        echo "usage: ${TOOL} --install [dir]" >&2
+        echo "  Symlink ssh, scp and rsync to this wrapper in DIR (default: the" >&2
+        echo "  directory containing this file), then put DIR on PATH ahead of the" >&2
+        echo "  real binaries. Normally invoked through those symlinks, not directly." >&2
+        exit 2
+        ;;
+    esac
+    ;;
+esac
+
+REAL="$(find_real "${TOOL}")" || { echo "${TOOL}: real binary not found on PATH" >&2; exit 127; }
+
+case "${TOOL}" in
+ssh)
+    # Let ssh resolve the connection: "-G" prints the effective config (the
+    # original "host" token and the HostName-resolved "hostname") and exits
+    # without connecting. Match either against the password file.
+    PASSWD=""
+    if [ -f "${PASSWD_FILE}" ] && is_openssh "${REAL}"; then
+        check_perms
+        for _h in $("${REAL}" -G "$@" 2>/dev/null | awk '$1=="host"||$1=="hostname"{print $2}'); do
+            PASSWD="$(lookup_passwd "${_h}")"
+            [ -n "${PASSWD}" ] && break
+        done
+    fi
+    if [ -n "${PASSWD}" ]; then
+        if command -v sshpass >/dev/null 2>&1; then
+            exec env SSHPASS="${PASSWD}" sshpass -e "${REAL}" ${PW_OPTS} "$@"
+        fi
+        echo "ssh: sshpass not found; falling back to interactive auth" >&2
+    fi
+    exec "${REAL}" "$@"
+    ;;
+scp)
+    # Route scp's transport through the ssh wrapper, unless the real ssh is not
+    # OpenSSH or the user supplied their own -S.
+    REAL_SSH="$(find_real ssh)"
+    if [ -x "${SSH_WRAPPER}" ] && [ -n "${REAL_SSH}" ] && is_openssh "${REAL_SSH}"; then
+        _inject=1
+        for _arg in "$@"; do
+            case "${_arg}" in
+            --) break ;;
+            -S|-S*) _inject=0; break ;;
+            esac
+        done
+        [ "${_inject}" = 1 ] && exec "${REAL}" -S "${SSH_WRAPPER}" "$@"
+    fi
+    exec "${REAL}" "$@"
+    ;;
+rsync)
+    # Point RSYNC_RSH at the ssh wrapper, unless the real ssh is not OpenSSH or
+    # an explicit transport (-e/--rsh or a preset RSYNC_RSH) is in effect.
+    REAL_SSH="$(find_real ssh)"
+    if [ -x "${SSH_WRAPPER}" ] && [ -z "${RSYNC_RSH}" ] && [ -n "${REAL_SSH}" ] && is_openssh "${REAL_SSH}"; then
+        exec env RSYNC_RSH="${SSH_WRAPPER}" "${REAL}" "$@"
+    fi
+    exec "${REAL}" "$@"
+    ;;
+esac

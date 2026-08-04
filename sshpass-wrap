@@ -12,9 +12,37 @@
 # against any other ssh (dropbear/busybox) the wrapper is a transparent
 # passthrough. scp delegates by pointing its transport at the ssh name
 # ("scp -S"); rsync delegates by pointing RSYNC_RSH at the ssh name.
+#
+# "-V" prints an identification banner before the real version. That banner is
+# also how the wrapper avoids resolving the real binary to itself; see
+# WRAPPER_TAG below.
 
 PASSWD_FILE="${HOME}/.ssh/passwd"
 PW_OPTS="-o PreferredAuthentications=password,keyboard-interactive -o PubkeyAuthentication=no"
+
+# Identification banner, printed on "-V" (where ssh already prints its own
+# version, i.e. on stderr). It makes an installed wrapper visible to the user
+# and, more importantly, lets find_real recognize a copy of this wrapper on
+# PATH: a candidate is asked to identify itself with the same "-V" probe that
+# tells OpenSSH from other clients, so no second mechanism is needed.
+WRAPPER_TAG='sshpass-wrap: multi-call sshpass wrapper'
+
+# Answering a probe: identify ourselves and stop. This must resolve nothing,
+# because resolution is what probes in the first place -- a wrapper that
+# answered "-V" by delegating to the real binary would probe on the way, and
+# each probe of a wrapper would spawn another. Being a leaf keeps a probe at
+# exactly one process, so recursion cannot start here.
+if [ -n "${SSHPASS_WRAP_PROBE}" ]; then
+    printf '%s\n' "${WRAPPER_TAG}" >&2
+    exit 0
+fi
+
+# Backstop for recursion arriving by a route find_real cannot see (an older
+# copy of this wrapper that predates the banner, a hand-written "scp -S" or
+# RSYNC_RSH pointing back at us). Recursion here is not a plain loop: every
+# level forks for "-V" and "-G", so it multiplies. Legitimate nesting exists
+# (scp -S, RSYNC_RSH, ProxyCommand/ProxyJump) and is only a few levels deep.
+MAX_DEPTH=8
 
 # Directory this wrapper is installed in, so the real binaries can be located
 # regardless of install location (and never re-exec the wrapper itself).
@@ -30,6 +58,30 @@ case "$0" in
 esac
 SSH_WRAPPER="${WRAPPER_DIR}/ssh"
 
+# Ask a candidate what it is. Every client here answers "-V" at startup without
+# connecting, and a wrapper answers with WRAPPER_TAG alone (see above); an
+# unrelated binary that does not know "-V" just prints its usage, which matches
+# nothing. Version goes to stderr, so fold the two streams.
+probe() {
+    SSHPASS_WRAP_PROBE=1 "$1" -V 2>&1
+}
+
+# True if the candidate is this wrapper, whatever name or path it was reached
+# through. Skipping WRAPPER_DIR by name is not sufficient: the same directory
+# reaches PATH under other spellings (trailing slash, a symlinked or bind-mounted
+# path), WRAPPER_DIR itself is only a guess when $0 carries no directory, and a
+# second copy may be installed in another PATH entry. Any of those has the
+# wrapper exec itself, which multiplies rather than loops. Matching in the shell
+# instead of with grep saves a process here and still answers correctly when
+# PATH is too broken to find grep -- exactly when a candidate must not be
+# mistaken for a real binary.
+is_wrapper() {
+    case "$(probe "$1")" in
+    *"${WRAPPER_TAG}"*) return 0 ;;
+    esac
+    return 1
+}
+
 find_real() {
     _name="$1"
     _oldifs="${IFS}"
@@ -37,7 +89,8 @@ find_real() {
     for _dir in ${PATH}; do
         [ -n "${_dir}" ] || _dir="."
         [ "${_dir}" = "${WRAPPER_DIR}" ] && continue
-        if [ -x "${_dir}/${_name}" ] && [ ! -d "${_dir}/${_name}" ]; then
+        if [ -x "${_dir}/${_name}" ] && [ ! -d "${_dir}/${_name}" ] &&
+            ! is_wrapper "${_dir}/${_name}"; then
             IFS="${_oldifs}"
             printf '%s\n' "${_dir}/${_name}"
             return 0
@@ -48,7 +101,10 @@ find_real() {
 }
 
 is_openssh() {
-    "$1" -V 2>&1 | grep -q OpenSSH
+    case "$(probe "$1")" in
+    *OpenSSH*) return 0 ;;
+    esac
+    return 1
 }
 
 lookup_passwd() {
@@ -147,6 +203,32 @@ ssh|scp|rsync) ;;
     esac
     ;;
 esac
+
+# Count nesting levels and refuse to go deeper than legitimate delegation needs.
+# Exported so it survives the exec into the real binary and reaches whatever
+# that binary invokes us as. Anything unexpected in the variable restarts the
+# count rather than breaking the arithmetic.
+case "${SSHPASS_WRAP_DEPTH}" in
+''|*[!0-9]*) SSHPASS_WRAP_DEPTH=0 ;;
+esac
+SSHPASS_WRAP_DEPTH=$((SSHPASS_WRAP_DEPTH + 1))
+export SSHPASS_WRAP_DEPTH
+if [ "${SSHPASS_WRAP_DEPTH}" -gt "${MAX_DEPTH}" ]; then
+    printf '%s: nested more than %s levels deep, aborting; the wrapper is\n' \
+        "${TOOL}" "${MAX_DEPTH}" >&2
+    printf 'probably resolving %s to itself instead of the real binary\n' \
+        "${TOOL}" >&2
+    exit 127
+fi
+
+# A version query from a real user (a probe already exited above): announce
+# ourselves, then let the real binary print its own version as usual.
+for _arg in "$@"; do
+    case "${_arg}" in
+    --) break ;;
+    -V) printf '%s\n' "${WRAPPER_TAG}" >&2; break ;;
+    esac
+done
 
 REAL="$(find_real "${TOOL}")" || { echo "${TOOL}: real binary not found on PATH" >&2; exit 127; }
 
